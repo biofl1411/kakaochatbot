@@ -1,0 +1,14 @@
+# 카카오 챗봇 의존성
+
+# 웹 서버
+flask>=3.0.0
+flask-cors>=4.0.0
+waitress>=3.0.0
+
+# 크롤링
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+selenium>=4.15.0
+
+# 유틸리티
+rapidfuzz>=3.5.0
