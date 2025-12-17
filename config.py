@@ -8,6 +8,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 
+# 디렉토리 자동 생성
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+
 # 데이터베이스 설정
 DATABASE_PATH = os.path.join(DATA_DIR, "chatbot.db")
 
