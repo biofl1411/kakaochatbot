@@ -120,7 +120,7 @@ def chatbot():
                 if user_input == "식품":
                     buttons = ["식품제조가공업", "즉석판매제조가공업", "처음으로"]
                 else:
-                    buttons = ["축산물제조가공업", "식육즙판매가공업", "처음으로"]
+                    buttons = ["축산물제조가공업", "축산물즉석판매제조가공업", "처음으로"]
                 return make_response(
                     f"[{user_input}] 검사할 업종을 선택해주세요.",
                     buttons
@@ -133,7 +133,7 @@ def chatbot():
                 )
 
         # Step 3: 업종 선택 (검사주기만 해당)
-        if user_input in ["식품제조가공업", "즉석판매제조가공업", "축산물제조가공업", "식육즙판매가공업"]:
+        if user_input in ["식품제조가공업", "즉석판매제조가공업", "축산물제조가공업", "축산물즉석판매제조가공업"]:
             if user_data.get("기능") != "검사주기":
                 return make_response(
                     "먼저 원하시는 서비스를 선택해주세요.",
