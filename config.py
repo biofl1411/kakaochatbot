@@ -22,8 +22,8 @@ SERVER_PORT = 5000
 # 크롤링 대상 URL
 URL_MAPPING = {
     "검사항목": {
-        "식품": "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_229",
-        "축산": "https://www.biofl.co.kr/sub.jsp?code=XN0Cd4r7&question_230"
+        "식품": "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_241",
+        "축산": "https://www.biofl.co.kr/sub.jsp?code=XN0Cd4r7&question_243"
     },
     "검사주기": {
         "식품": "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94",
@@ -35,8 +35,8 @@ URL_MAPPING = {
 INDUSTRY_MAPPING = {
     "식품제조가공업": "question_236",
     "즉석판매제조가공업": "question_239",
-    "축산물제조가공업": "question_200",
-    "축산물즉석판매제조가공업": "question_210"
+    "축산물제조가공업": "question_240",
+    "축산물즉석판매제조가공업": "question_246"
 }
 
 # 스케줄러 설정 (크롤링 주기: 시간 단위)
