@@ -204,6 +204,36 @@ def is_similar(word1, word2, threshold=100):
     return fuzz.ratio(word1, word2) >= threshold or fuzz.partial_ratio(word1, word2) >= threshold
 
 
+def get_similarity_score(word1, word2):
+    """두 단어의 유사도 점수 반환 (0-100)"""
+    word1 = normalize_text(word1)
+    word2 = normalize_text(word2)
+    return max(fuzz.ratio(word1, word2), fuzz.partial_ratio(word1, word2))
+
+
+def find_similar_words(search_word, all_food_types, threshold=50, limit=5):
+    """유사도가 높은 단어들을 찾아 반환"""
+    similarities = []
+    normalized_search = normalize_text(search_word)
+
+    for food_type_info in all_food_types:
+        ft = food_type_info["food_type"]
+        # 괄호 앞 부분만 추출
+        ft_base = ft.split('(')[0].strip()
+        normalized_ft = normalize_text(ft_base)
+
+        score = get_similarity_score(normalized_search, normalized_ft)
+        if score >= threshold:
+            similarities.append({
+                **food_type_info,
+                "score": score
+            })
+
+    # 점수 높은 순으로 정렬
+    similarities.sort(key=lambda x: x["score"], reverse=True)
+    return similarities[:limit] if limit else similarities
+
+
 def fix_spacing(text):
     """크롤링된 텍스트의 띄어쓰기 오류 수정"""
     # 띄어쓰기 수정 패턴 (붙어있는 것 → 띄어쓰기 추가)
@@ -368,6 +398,39 @@ def get_inspection_cycle(category, industry, food_type):
                     "cycle": all_matches[0]["cycle"]
                 }
 
+        # 정확/끝나는 매칭이 없는 경우, 모든 식품 유형 수집하여 유사도 검색
+        all_food_types = []
+        for row in rows:
+            columns = row.find_all("td", recursive=False)
+            if len(columns) < 4:
+                continue
+            current_food_group = columns[1].get_text(strip=True)
+            food_type_text = columns[2].get_text(strip=True)
+            cycle = columns[3].get_text(strip=True)
+            cycle = fix_spacing(cycle)
+
+            food_type_list = split_with_parentheses(food_type_text)
+            for ft in food_type_list:
+                all_food_types.append({
+                    "food_group": current_food_group,
+                    "food_type": ft,
+                    "cycle": cycle
+                })
+
+        # 유사도가 높은 단어 찾기
+        similar_words = find_similar_words(food_type, all_food_types, threshold=40, limit=5)
+
+        if similar_words:
+            options = [s["food_type"] for s in similar_words]
+            return {
+                "type": "similar",
+                "message": f"🔍 '{food_type}'과(와) 유사한 항목을 찾았습니다. 아래에서 선택해주세요:",
+                "options": options,
+                "all_similar": similar_words,
+                "all_food_types": all_food_types,
+                "search_word": food_type
+            }
+
         return {"type": "error", "message": "❌ 해당 식품 유형의 검사주기를 찾을 수 없습니다."}
 
     except Exception as e:
@@ -464,6 +527,38 @@ def get_inspection_items(category, food_type):
                     "matches": all_matches
                 }
 
+        # 정확/끝나는 매칭이 없는 경우, 모든 식품 유형 수집하여 유사도 검색
+        all_food_types = []
+        for table in tables:
+            rows = table.find_all("tr")[1:]
+            for row in rows:
+                columns = row.find_all("td", recursive=False)
+                if len(columns) < 3:
+                    continue
+                current_food_type = columns[1].get_text(strip=True)
+                test_items = columns[2].get_text(strip=True)
+
+                food_type_list = split_with_parentheses(current_food_type)
+                for ft in food_type_list:
+                    all_food_types.append({
+                        "food_type": ft,
+                        "test_items": test_items
+                    })
+
+        # 유사도가 높은 단어 찾기
+        similar_words = find_similar_words(food_type, all_food_types, threshold=40, limit=5)
+
+        if similar_words:
+            options = [s["food_type"] for s in similar_words]
+            return {
+                "type": "similar",
+                "message": f"🔍 '{food_type}'과(와) 유사한 항목을 찾았습니다. 아래에서 선택해주세요:",
+                "options": options,
+                "all_similar": similar_words,
+                "all_food_types": all_food_types,
+                "search_word": food_type
+            }
+
         return {"type": "error", "message": f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."}
 
     except Exception as e:
@@ -513,8 +608,80 @@ def chatbot():
         increment_usage(user_id, "text")
         user_usage = get_user_usage(user_id)
 
+        # "다른 유사한 단어 추천" 버튼 처리
+        if user_input == "다른 유사한 단어 추천" and "pending_similar_cycle" in user_data:
+            pending = user_data["pending_similar_cycle"]
+            # 현재 표시된 인덱스 이후의 유사 단어 가져오기
+            current_index = pending.get("current_index", 5)
+            all_food_types = pending["all_food_types"]
+            search_word = pending["search_word"]
+
+            # 다음 유사 단어 찾기
+            next_similar = find_similar_words(search_word, all_food_types, threshold=40, limit=10)
+            # 이미 표시된 항목 제외
+            shown_food_types = pending.get("shown", [])
+            next_similar = [s for s in next_similar if s["food_type"] not in shown_food_types][:5]
+
+            if next_similar:
+                options = [s["food_type"] for s in next_similar]
+                response_text = f"🔍 '{search_word}'과(와) 유사한 다른 항목들입니다. 아래에서 선택해주세요:"
+                # 표시한 항목 기록
+                pending["shown"].extend(options)
+                pending["current_index"] = current_index + 5
+                response_buttons = ["검사주기", "검사항목"] + options + ["다른 유사한 단어 추천"]
+            else:
+                response_text = f"❌ '{search_word}'과(와) 유사한 다른 항목이 더 이상 없습니다."
+                del user_data["pending_similar_cycle"]
+
+        # 유사 단어 선택 대기 중인 경우
+        elif "pending_similar_cycle" in user_data:
+            pending = user_data["pending_similar_cycle"]
+            # 선택한 항목 찾기
+            for match in pending["all_similar"]:
+                if match["food_type"] == user_input or normalize_text(match["food_type"]) == normalize_text(user_input):
+                    response_text = f"✅ [{match['food_group']}] {match['food_type']}의 검사주기: {match['cycle']}"
+                    del user_data["pending_similar_cycle"]
+                    break
+            else:
+                # 전체 목록에서 다시 검색
+                for item in pending["all_food_types"]:
+                    if item["food_type"] == user_input or normalize_text(item["food_type"]) == normalize_text(user_input):
+                        response_text = f"✅ [{item['food_group']}] {item['food_type']}의 검사주기: {item['cycle']}"
+                        del user_data["pending_similar_cycle"]
+                        break
+                else:
+                    # 새로운 검색어로 재검색
+                    result = get_inspection_cycle(user_data.get("분야"), user_data.get("업종"), user_input)
+                    if result["type"] == "result":
+                        response_text = result["message"]
+                        if "pending_similar_cycle" in user_data:
+                            del user_data["pending_similar_cycle"]
+                    elif result["type"] == "selection":
+                        response_text = result["message"]
+                        user_data["pending_selection"] = {
+                            "food_group": result["food_group"],
+                            "cycle": result["cycle"]
+                        }
+                        if "pending_similar_cycle" in user_data:
+                            del user_data["pending_similar_cycle"]
+                        response_buttons = ["검사주기", "검사항목"] + result["options"]
+                    elif result["type"] == "similar":
+                        response_text = result["message"]
+                        user_data["pending_similar_cycle"] = {
+                            "all_similar": result["all_similar"],
+                            "all_food_types": result["all_food_types"],
+                            "search_word": result["search_word"],
+                            "shown": result["options"],
+                            "current_index": 5
+                        }
+                        response_buttons = ["검사주기", "검사항목"] + result["options"] + ["다른 유사한 단어 추천"]
+                    else:
+                        response_text = result["message"]
+                        if "pending_similar_cycle" in user_data:
+                            del user_data["pending_similar_cycle"]
+
         # 식품군 선택 대기 중인 경우, 저장된 정보로 결과 반환
-        if "pending_selection" in user_data:
+        elif "pending_selection" in user_data:
             pending = user_data["pending_selection"]
             response_text = f"✅ [{pending['food_group']}] {user_input}의 검사주기: {pending['cycle']}"
             del user_data["pending_selection"]
@@ -530,12 +697,23 @@ def chatbot():
                 }
                 # 식품 유형들을 quickReplies로 추가
                 response_buttons = ["검사주기", "검사항목"] + result["options"]
+            elif result["type"] == "similar":
+                # 유사 단어 추천 - 옵션 제공
+                response_text = result["message"]
+                user_data["pending_similar_cycle"] = {
+                    "all_similar": result["all_similar"],
+                    "all_food_types": result["all_food_types"],
+                    "search_word": result["search_word"],
+                    "shown": result["options"],
+                    "current_index": 5
+                }
+                response_buttons = ["검사주기", "검사항목"] + result["options"] + ["다른 유사한 단어 추천"]
             else:
                 # 결과 또는 에러
                 response_text = result["message"]
 
         # 3회 이상 검색 시 이미지 업로드 안내 (선택 대기 중이 아닐 때만)
-        if "pending_selection" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
+        if "pending_selection" not in user_data and "pending_similar_cycle" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
             response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
@@ -544,8 +722,76 @@ def chatbot():
         increment_usage(user_id, "text")
         user_usage = get_user_usage(user_id)
 
+        # "다른 유사한 단어 추천" 버튼 처리
+        if user_input == "다른 유사한 단어 추천" and "pending_similar_items" in user_data:
+            pending = user_data["pending_similar_items"]
+            # 현재 표시된 인덱스 이후의 유사 단어 가져오기
+            all_food_types = pending["all_food_types"]
+            search_word = pending["search_word"]
+
+            # 다음 유사 단어 찾기
+            next_similar = find_similar_words(search_word, all_food_types, threshold=40, limit=10)
+            # 이미 표시된 항목 제외
+            shown_food_types = pending.get("shown", [])
+            next_similar = [s for s in next_similar if s["food_type"] not in shown_food_types][:5]
+
+            if next_similar:
+                options = [s["food_type"] for s in next_similar]
+                response_text = f"🔍 '{search_word}'과(와) 유사한 다른 항목들입니다. 아래에서 선택해주세요:"
+                # 표시한 항목 기록
+                pending["shown"].extend(options)
+                response_buttons = ["검사주기", "검사항목"] + options + ["다른 유사한 단어 추천"]
+            else:
+                response_text = f"❌ '{search_word}'과(와) 유사한 다른 항목이 더 이상 없습니다."
+                del user_data["pending_similar_items"]
+
+        # 유사 단어 선택 대기 중인 경우
+        elif "pending_similar_items" in user_data:
+            pending = user_data["pending_similar_items"]
+            # 선택한 항목 찾기
+            for match in pending["all_similar"]:
+                if match["food_type"] == user_input or normalize_text(match["food_type"]) == normalize_text(user_input):
+                    response_text = f"✅ [{match['food_type']}]의 검사 항목: {match['test_items']}"
+                    del user_data["pending_similar_items"]
+                    break
+            else:
+                # 전체 목록에서 다시 검색
+                for item in pending["all_food_types"]:
+                    if item["food_type"] == user_input or normalize_text(item["food_type"]) == normalize_text(user_input):
+                        response_text = f"✅ [{item['food_type']}]의 검사 항목: {item['test_items']}"
+                        del user_data["pending_similar_items"]
+                        break
+                else:
+                    # 새로운 검색어로 재검색
+                    result = get_inspection_items(user_data.get("분야"), user_input)
+                    if result["type"] == "result":
+                        response_text = result["message"]
+                        if "pending_similar_items" in user_data:
+                            del user_data["pending_similar_items"]
+                    elif result["type"] == "selection":
+                        response_text = result["message"]
+                        user_data["pending_items_selection"] = {
+                            "matches": result["matches"]
+                        }
+                        if "pending_similar_items" in user_data:
+                            del user_data["pending_similar_items"]
+                        response_buttons = ["검사주기", "검사항목"] + result["options"]
+                    elif result["type"] == "similar":
+                        response_text = result["message"]
+                        user_data["pending_similar_items"] = {
+                            "all_similar": result["all_similar"],
+                            "all_food_types": result["all_food_types"],
+                            "search_word": result["search_word"],
+                            "shown": result["options"]
+                        }
+                        response_buttons = ["검사주기", "검사항목"] + result["options"] + ["다른 유사한 단어 추천"]
+                    else:
+                        response_text = result["message"]
+                        if "pending_similar_items" in user_data:
+                            del user_data["pending_similar_items"]
+
         # 검사항목 선택 대기 중인 경우, 저장된 정보로 결과 반환
-        if "pending_items_selection" in user_data:
+        elif "pending_items_selection" in user_data:
             pending = user_data["pending_items_selection"]
             # 선택한 항목 찾기
             for match in pending["matches"]:
@@ -566,12 +812,22 @@ def chatbot():
                 }
                 # 식품 유형들을 quickReplies로 추가
                 response_buttons = ["검사주기", "검사항목"] + result["options"]
+            elif result["type"] == "similar":
+                # 유사 단어 추천 - 옵션 제공
+                response_text = result["message"]
+                user_data["pending_similar_items"] = {
+                    "all_similar": result["all_similar"],
+                    "all_food_types": result["all_food_types"],
+                    "search_word": result["search_word"],
+                    "shown": result["options"]
+                }
+                response_buttons = ["검사주기", "검사항목"] + result["options"] + ["다른 유사한 단어 추천"]
             else:
                 # 결과 또는 에러
                 response_text = result["message"]
 
         # 3회 이상 검색 시 이미지 업로드 안내 (선택 대기 중이 아닐 때만)
-        if "pending_items_selection" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
+        if "pending_items_selection" not in user_data and "pending_similar_items" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
             response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
