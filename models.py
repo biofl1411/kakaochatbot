@@ -5,7 +5,7 @@
 import sqlite3
 from datetime import datetime
 from rapidfuzz import fuzz
-from config import DATABASE_PATH
+from config import DATABASE_PATH, VISION_API_MONTHLY_LIMIT
 
 
 def get_connection():
@@ -54,6 +54,18 @@ def init_database():
             status TEXT NOT NULL,
             message TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # API 사용량 추적 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            api_name TEXT NOT NULL,
+            year_month TEXT NOT NULL,
+            call_count INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(api_name, year_month)
         )
     """)
 
@@ -298,6 +310,72 @@ def get_last_crawl_time() -> datetime:
     if result:
         return datetime.fromisoformat(result['created_at'])
     return None
+
+
+# ===== API 사용량 추적 =====
+
+def get_current_year_month() -> str:
+    """현재 년월 문자열 반환 (YYYY-MM)"""
+    return datetime.now().strftime("%Y-%m")
+
+
+def get_api_usage(api_name: str) -> int:
+    """현재 월의 API 호출 횟수 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    year_month = get_current_year_month()
+
+    cursor.execute("""
+        SELECT call_count FROM api_usage
+        WHERE api_name = ? AND year_month = ?
+    """, (api_name, year_month))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result['call_count'] if result else 0
+
+
+def increment_api_usage(api_name: str) -> int:
+    """API 호출 횟수 증가 및 현재 횟수 반환"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    year_month = get_current_year_month()
+
+    # UPSERT: 있으면 증가, 없으면 새로 생성
+    cursor.execute("""
+        INSERT INTO api_usage (api_name, year_month, call_count, updated_at)
+        VALUES (?, ?, 1, ?)
+        ON CONFLICT(api_name, year_month)
+        DO UPDATE SET call_count = call_count + 1, updated_at = ?
+    """, (api_name, year_month, datetime.now(), datetime.now()))
+
+    conn.commit()
+
+    # 현재 횟수 조회
+    cursor.execute("""
+        SELECT call_count FROM api_usage
+        WHERE api_name = ? AND year_month = ?
+    """, (api_name, year_month))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return result['call_count'] if result else 0
+
+
+def can_use_vision_api() -> bool:
+    """Vision API 사용 가능 여부 (월별 제한 체크)"""
+    current_usage = get_api_usage("google_vision")
+    return current_usage < VISION_API_MONTHLY_LIMIT
+
+
+def get_vision_api_remaining() -> int:
+    """Vision API 남은 호출 횟수"""
+    current_usage = get_api_usage("google_vision")
+    return max(0, VISION_API_MONTHLY_LIMIT - current_usage)
 
 
 # 데이터베이스 초기화 실행

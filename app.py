@@ -16,8 +16,11 @@ from models import (
     search_inspection_cycles,
     find_similar_items,
     find_similar_cycles,
-    get_last_crawl_time
+    get_last_crawl_time,
+    can_use_vision_api,
+    get_vision_api_remaining
 )
+from vision_ocr import extract_food_type_from_image, is_vision_api_available
 
 # 로깅 설정
 logging.basicConfig(
@@ -79,7 +82,15 @@ def chatbot():
         user_input = data.get("userRequest", {}).get("utterance", "").strip()
         user_id = data.get("userRequest", {}).get("user", {}).get("id", "default")
 
-        logger.info(f"[{user_id}] 입력: {user_input}")
+        # 이미지 업로드 확인
+        params = data.get("action", {}).get("params", {})
+        image_url = None
+        if "secureimage" in params:
+            image_url = params["secureimage"]
+        elif "image" in params:
+            image_url = params["image"]
+
+        logger.info(f"[{user_id}] 입력: {user_input}" + (f" (이미지: {image_url[:50]}...)" if image_url else ""))
 
         # 사용자 상태 초기화
         if user_id not in user_state:
@@ -96,6 +107,54 @@ def chatbot():
                 "안녕하세요! 바이오에프엘 검사 안내 챗봇입니다.\n\n원하시는 서비스를 선택해주세요.",
                 ["검사주기", "검사항목"]
             )
+
+        # ===== 이미지 업로드 처리 =====
+        if image_url and user_data.get("기능") and user_data.get("분야"):
+            # 이미지에서 식품유형 추출 시도
+            ocr_result = extract_food_type_from_image(image_url)
+
+            if ocr_result['success'] and ocr_result['food_type']:
+                food_type = ocr_result['food_type']
+                logger.info(f"[{user_id}] OCR 식품유형: {food_type}")
+
+                # 추출된 식품유형으로 검색
+                if user_data["기능"] == "검사항목":
+                    result = get_inspection_item(user_data["분야"], food_type)
+                    if result:
+                        user_data["실패횟수"] = 0
+                        response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
+                        response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                        response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        return make_response(response_text, ["종료"])
+                    else:
+                        # 이미지에서 추출했지만 DB에 없는 경우
+                        similar = find_similar_items(user_data["분야"], food_type)
+                        response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
+                        response_text += f"❌ 하지만 '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
+                        return make_response(response_text, ["종료"])
+
+                elif user_data["기능"] == "검사주기" and user_data.get("업종"):
+                    result = get_inspection_cycle(user_data["분야"], user_data["업종"], food_type)
+                    if result:
+                        user_data["실패횟수"] = 0
+                        response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
+                        response_text += f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                        response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        return make_response(response_text, ["종료"])
+                    else:
+                        similar = find_similar_cycles(user_data["분야"], user_data["업종"], food_type)
+                        response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
+                        response_text += f"❌ 하지만 '{food_type}'에 대한 검사주기를 찾을 수 없습니다."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
+                        return make_response(response_text, ["종료"])
+            else:
+                # OCR 실패
+                response_text = f"📷 {ocr_result['message']}\n\n"
+                response_text += "식품유형을 직접 입력해주세요."
+                return make_response(response_text, ["종료"])
 
         # ===== 결제수단 기능 =====
         if user_input in ["결제수단", "결제정보"]:
@@ -246,6 +305,12 @@ def chatbot():
                         response_text += "📋 품목제조보고서 또는 영업등록증/신고증/허가증의 '식품유형'을 확인하여 다시 입력해주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
+                    elif user_data["실패횟수"] >= 2 and is_vision_api_available():
+                        # 2회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n"
+                        response_text += "📷 품목제조보고서 또는 영업등록증/신고증/허가증 이미지를 업로드하시면 자동으로 식품유형을 찾아드립니다."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
                         response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                         if similar:
@@ -277,6 +342,15 @@ def chatbot():
                             response_text += "📋 품목제조보고서의 '식품유형'을 확인하여 다시 입력해주세요."
                         else:
                             response_text += "📋 영업등록증 또는 신고증/허가증의 '식품유형'을 확인하여 다시 입력해주세요."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
+                    elif user_data["실패횟수"] >= 2 and is_vision_api_available():
+                        # 2회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n"
+                        if user_data["업종"] in ["식품제조가공업", "축산물제조가공업"]:
+                            response_text += "📷 품목제조보고서 이미지를 업로드하시면 자동으로 식품유형을 찾아드립니다."
+                        else:
+                            response_text += "📷 영업등록증 또는 신고증/허가증 이미지를 업로드하시면 자동으로 식품유형을 찾아드립니다."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:

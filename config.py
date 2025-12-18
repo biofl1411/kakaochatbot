@@ -52,3 +52,7 @@ CRAWL_MINUTE = 0
 # 로깅 설정
 LOG_FILE = os.path.join(LOG_DIR, "chatbot.log")
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
+
+# Google Vision API 설정
+GOOGLE_VISION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+VISION_API_MONTHLY_LIMIT = 990  # 월별 API 호출 제한 (무료 1000건 중 여유분 제외)
