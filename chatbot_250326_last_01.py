@@ -226,6 +226,34 @@ def fix_spacing(text):
     return text
 
 
+def split_with_parentheses(text):
+    """괄호를 고려하여 쉼표로 분리 - 괄호 안의 쉼표는 무시"""
+    result = []
+    current = ""
+    depth = 0  # 괄호 깊이
+
+    for char in text:
+        if char == '(':
+            depth += 1
+            current += char
+        elif char == ')':
+            depth -= 1
+            current += char
+        elif char == ',' and depth == 0:
+            # 괄호 밖의 쉼표 - 분리
+            if current.strip():
+                result.append(current.strip())
+            current = ""
+        else:
+            current += char
+
+    # 마지막 항목 추가
+    if current.strip():
+        result.append(current.strip())
+
+    return result
+
+
 def get_inspection_cycle(category, industry, food_type):
     url = url_mapping.get("검사주기", {}).get(category)
     if not url:
@@ -261,7 +289,8 @@ def get_inspection_cycle(category, industry, food_type):
             # 띄어쓰기 오류 수정
             cycle = fix_spacing(cycle)
 
-            food_type_list = [ft.strip() for ft in food_type_text.split(',')]
+            # 괄호를 고려하여 식품 유형 분리
+            food_type_list = split_with_parentheses(food_type_text)
 
             # 식품군과 정확히 일치하고, 식품유형이 여러 개인 경우 선택 요청
             if is_similar(food_type, current_food_group) and len(food_type_list) > 1:
