@@ -190,7 +190,17 @@ def get_driver():
     return _driver
 
 
+def normalize_text(text):
+    """텍스트 정규화 - 특수문자 제거"""
+    # 가운뎃점(·) 제거
+    text = text.replace("·", "")
+    return text
+
+
 def is_similar(word1, word2, threshold=100):
+    # 비교 전 텍스트 정규화 (가운뎃점 등 제거)
+    word1 = normalize_text(word1)
+    word2 = normalize_text(word2)
     return fuzz.ratio(word1, word2) >= threshold or fuzz.partial_ratio(word1, word2) >= threshold
 
 
