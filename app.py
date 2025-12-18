@@ -291,7 +291,7 @@ def chatbot():
                 if len(all_matches) > 1:
                     # 여러 개 매칭 시 선택지 제공
                     user_data["실패횟수"] = 0
-                    response_text = f"'{food_type}'(으)로 끝나는 식품유형이 {len(all_matches)}개 있습니다.\n\n"
+                    response_text = f"'{food_type}'(와)과 관련된 식품유형이 {len(all_matches)}개 있습니다.\n\n"
                     response_text += "원하시는 항목을 선택해주세요."
 
                     # 버튼으로 선택지 제공 (최대 10개)
@@ -339,7 +339,7 @@ def chatbot():
                 if len(all_matches) > 1:
                     # 여러 개 매칭 시 선택지 제공
                     user_data["실패횟수"] = 0
-                    response_text = f"'{food_type}'(으)로 끝나는 식품유형이 {len(all_matches)}개 있습니다.\n\n"
+                    response_text = f"'{food_type}'(와)과 관련된 식품유형이 {len(all_matches)}개 있습니다.\n\n"
                     response_text += "원하시는 항목을 선택해주세요."
 
                     # 버튼으로 선택지 제공 (최대 10개)
