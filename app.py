@@ -155,6 +155,17 @@ def chatbot():
 
             return make_response(response_text, ["결제수단", "처음으로"])
 
+        # ===== 상담원 연결 =====
+        if user_input == "상담원 연결":
+            response_text = "👩‍💼 상담원 연결 안내\n\n"
+            response_text += "⏰ 상담 가능 시간\n"
+            response_text += "평일 09:00 ~ 17:00\n\n"
+            response_text += "━━━━━━━━━━━━━━━\n"
+            response_text += "아래 링크를 클릭하여 상담원과 연결하세요.\n\n"
+            response_text += "🔗 http://pf.kakao.com/_uCxnvxl/chat"
+
+            return make_response(response_text, ["처음으로"])
+
         # Step 1: 기능 선택
         if user_input in ["검사주기", "검사항목"]:
             user_data["기능"] = user_input
