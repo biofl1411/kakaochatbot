@@ -276,7 +276,13 @@ def get_inspection_cycle(category, industry, food_type):
 
         rows = table.find_all("tr")[1:]
 
-        # 1단계: 식품군(food_group)과 정확히 일치하는지 확인
+        # 검색어 정규화
+        normalized_input = normalize_text(food_type)
+
+        # 모든 행을 순회하며 매칭되는 항목 수집
+        exact_matches = []  # 정확히 일치
+        endswith_matches = []  # 입력어로 끝나는 항목
+
         for row in rows:
             columns = row.find_all("td", recursive=False)
             if len(columns) < 4:
@@ -302,11 +308,64 @@ def get_inspection_cycle(category, industry, food_type):
                     "cycle": cycle
                 }
 
-            # 식품유형과 정확히 일치하는 경우
-            if any(is_similar(food_type, ft) for ft in food_type_list):
+            for ft in food_type_list:
+                normalized_ft = normalize_text(ft)
+                # 괄호 앞 부분만 추출 (예: "즉석섭취식품(도시락, 김밥류)" → "즉석섭취식품")
+                ft_base = ft.split('(')[0].strip()
+                normalized_ft_base = normalize_text(ft_base)
+
+                # 1. 정확히 일치하는 경우
+                if normalized_input == normalized_ft_base or normalized_input == normalized_ft:
+                    exact_matches.append({
+                        "food_group": current_food_group,
+                        "food_type": ft,
+                        "cycle": cycle
+                    })
+                # 2. 입력어로 끝나는 경우 (예: "햄" → "생햄", "프레스햄")
+                elif normalized_ft_base.endswith(normalized_input) and len(normalized_input) >= 1:
+                    endswith_matches.append({
+                        "food_group": current_food_group,
+                        "food_type": ft,
+                        "cycle": cycle
+                    })
+
+        # 정확히 일치하는 항목이 1개면 결과 반환
+        if len(exact_matches) == 1:
+            match = exact_matches[0]
+            return {
+                "type": "result",
+                "message": f"✅ [{match['food_group']}] {match['food_type']}의 검사주기: {match['cycle']}"
+            }
+
+        # 정확히 일치하는 항목이 여러 개면 선택 요청
+        if len(exact_matches) > 1:
+            options = [m["food_type"] for m in exact_matches]
+            return {
+                "type": "selection",
+                "message": f"📋 '{food_type}'에 해당하는 항목이 여러 개 있습니다. 아래에서 선택해주세요:",
+                "options": options,
+                "food_group": exact_matches[0]["food_group"],
+                "cycle": exact_matches[0]["cycle"]
+            }
+
+        # 입력어로 끝나는 항목들이 있으면 선택 요청
+        if len(endswith_matches) > 0:
+            # 정확 일치 + 끝나는 항목 합치기
+            all_matches = exact_matches + endswith_matches
+            if len(all_matches) == 1:
+                match = all_matches[0]
                 return {
                     "type": "result",
-                    "message": f"✅ [{current_food_group}] {food_type}의 검사주기: {cycle}"
+                    "message": f"✅ [{match['food_group']}] {match['food_type']}의 검사주기: {match['cycle']}"
+                }
+            else:
+                options = [m["food_type"] for m in all_matches]
+                return {
+                    "type": "selection",
+                    "message": f"📋 '{food_type}'(으)로 끝나는 항목이 여러 개 있습니다. 아래에서 선택해주세요:",
+                    "options": options,
+                    "food_group": all_matches[0]["food_group"],
+                    "cycle": all_matches[0]["cycle"]
                 }
 
         return {"type": "error", "message": "❌ 해당 식품 유형의 검사주기를 찾을 수 없습니다."}
