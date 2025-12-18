@@ -92,14 +92,17 @@ def save_inspection_item(category: str, food_type: str, items: str):
 
 
 def get_inspection_item(category: str, food_type: str) -> dict:
-    """검사항목 조회"""
+    """검사항목 조회 (띄어쓰기 무시)"""
     conn = get_connection()
     cursor = conn.cursor()
 
+    # 띄어쓰기 제거한 검색어
+    search_key = food_type.replace(" ", "")
+
     cursor.execute("""
         SELECT * FROM inspection_items
-        WHERE category = ? AND food_type LIKE ?
-    """, (category, f"%{food_type}%"))
+        WHERE category = ? AND REPLACE(food_type, ' ', '') LIKE ?
+    """, (category, f"%{search_key}%"))
 
     result = cursor.fetchone()
     conn.close()
@@ -155,14 +158,17 @@ def save_inspection_cycle(category: str, industry: str, food_group: str, food_ty
 
 
 def get_inspection_cycle(category: str, industry: str, food_type: str) -> dict:
-    """검사주기 조회"""
+    """검사주기 조회 (띄어쓰기 무시)"""
     conn = get_connection()
     cursor = conn.cursor()
 
+    # 띄어쓰기 제거한 검색어
+    search_key = food_type.replace(" ", "")
+
     cursor.execute("""
         SELECT * FROM inspection_cycles
-        WHERE category = ? AND industry = ? AND food_type LIKE ?
-    """, (category, industry, f"%{food_type}%"))
+        WHERE category = ? AND industry = ? AND REPLACE(food_type, ' ', '') LIKE ?
+    """, (category, industry, f"%{search_key}%"))
 
     result = cursor.fetchone()
     conn.close()
@@ -216,15 +222,19 @@ def get_all_food_types_cycles(category: str, industry: str) -> list:
 
 
 def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list:
-    """검사항목에서 유사한 식품 유형 찾기 (2글자 이상 공통)"""
+    """검사항목에서 유사한 식품 유형 찾기 (2글자 이상 공통, 띄어쓰기 무시)"""
     all_types = get_all_food_types_items(category)
     similar = []
 
+    # 띄어쓰기 제거
+    keyword_normalized = keyword.replace(" ", "")
+
     for food_type in all_types:
+        food_type_normalized = food_type.replace(" ", "")
         # 공통 글자 수 체크
-        common_chars = set(keyword) & set(food_type)
+        common_chars = set(keyword_normalized) & set(food_type_normalized)
         if len(common_chars) >= 2:
-            score = fuzz.partial_ratio(keyword, food_type)
+            score = fuzz.partial_ratio(keyword_normalized, food_type_normalized)
             if score >= min_score:
                 similar.append((food_type, score))
 
@@ -234,15 +244,19 @@ def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list
 
 
 def find_similar_cycles(category: str, industry: str, keyword: str, min_score: int = 40) -> list:
-    """검사주기에서 유사한 식품 유형 찾기 (2글자 이상 공통)"""
+    """검사주기에서 유사한 식품 유형 찾기 (2글자 이상 공통, 띄어쓰기 무시)"""
     all_types = get_all_food_types_cycles(category, industry)
     similar = []
 
+    # 띄어쓰기 제거
+    keyword_normalized = keyword.replace(" ", "")
+
     for food_type in all_types:
+        food_type_normalized = food_type.replace(" ", "")
         # 공통 글자 수 체크
-        common_chars = set(keyword) & set(food_type)
+        common_chars = set(keyword_normalized) & set(food_type_normalized)
         if len(common_chars) >= 2:
-            score = fuzz.partial_ratio(keyword, food_type)
+            score = fuzz.partial_ratio(keyword_normalized, food_type_normalized)
             if score >= min_score:
                 similar.append((food_type, score))
 
