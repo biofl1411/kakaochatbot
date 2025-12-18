@@ -316,7 +316,7 @@ def chatbot():
 
         # 3회 이상 검색 시 이미지 업로드 안내
         if user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
-            response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 관련 문서 이미지를 업로드해주세요."
+            response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
     elif user_data.get("기능") == "검사항목":
@@ -329,7 +329,7 @@ def chatbot():
 
         # 3회 이상 검색 시 이미지 업로드 안내
         if user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
-            response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 관련 문서 이미지를 업로드해주세요."
+            response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
     return jsonify({
