@@ -378,17 +378,24 @@ def get_inspection_cycle(category, industry, food_type):
 def get_inspection_items(category, food_type):
     url = url_mapping.get("검사항목", {}).get(category)
     if not url:
-        return f"❌ {category} 검사항목 정보를 찾을 수 없습니다."
+        return {"type": "error", "message": f"❌ {category} 검사항목 정보를 찾을 수 없습니다."}
 
     try:
         response = requests.get(url)
         if response.status_code != 200:
-            return f"❌ 요청 실패: 상태 코드 {response.status_code}"
+            return {"type": "error", "message": f"❌ 요청 실패: 상태 코드 {response.status_code}"}
 
         soup = BeautifulSoup(response.content, "html.parser")
         tables = soup.find_all("table")
         if not tables:
-            return "❌ 검사 항목 테이블을 찾을 수 없습니다."
+            return {"type": "error", "message": "❌ 검사 항목 테이블을 찾을 수 없습니다."}
+
+        # 검색어 정규화
+        normalized_input = normalize_text(food_type)
+
+        # 모든 테이블을 순회하며 매칭되는 항목 수집
+        exact_matches = []  # 정확히 일치
+        endswith_matches = []  # 입력어로 끝나는 항목
 
         for table in tables:
             rows = table.find_all("tr")[1:]
@@ -398,13 +405,70 @@ def get_inspection_items(category, food_type):
                     continue
                 current_food_type = columns[1].get_text(strip=True)
                 test_items = columns[2].get_text(strip=True)
-                if is_similar(food_type, current_food_type):
-                    return f"✅ [{current_food_type}]의 검사 항목: {test_items}"
-        return f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."
+
+                # 괄호를 고려하여 식품 유형 분리
+                food_type_list = split_with_parentheses(current_food_type)
+
+                for ft in food_type_list:
+                    normalized_ft = normalize_text(ft)
+                    # 괄호 앞 부분만 추출
+                    ft_base = ft.split('(')[0].strip()
+                    normalized_ft_base = normalize_text(ft_base)
+
+                    # 1. 정확히 일치하는 경우
+                    if normalized_input == normalized_ft_base or normalized_input == normalized_ft:
+                        exact_matches.append({
+                            "food_type": ft,
+                            "test_items": test_items
+                        })
+                    # 2. 입력어로 끝나는 경우 (예: "햄" → "생햄", "프레스햄")
+                    elif normalized_ft_base.endswith(normalized_input) and len(normalized_input) >= 1:
+                        endswith_matches.append({
+                            "food_type": ft,
+                            "test_items": test_items
+                        })
+
+        # 정확히 일치하는 항목이 1개면 결과 반환
+        if len(exact_matches) == 1:
+            match = exact_matches[0]
+            return {
+                "type": "result",
+                "message": f"✅ [{match['food_type']}]의 검사 항목: {match['test_items']}"
+            }
+
+        # 정확히 일치하는 항목이 여러 개면 선택 요청
+        if len(exact_matches) > 1:
+            options = [m["food_type"] for m in exact_matches]
+            return {
+                "type": "selection",
+                "message": f"📋 '{food_type}'에 해당하는 항목이 여러 개 있습니다. 아래에서 선택해주세요:",
+                "options": options,
+                "matches": exact_matches
+            }
+
+        # 입력어로 끝나는 항목들이 있으면 선택 요청
+        if len(endswith_matches) > 0:
+            all_matches = exact_matches + endswith_matches
+            if len(all_matches) == 1:
+                match = all_matches[0]
+                return {
+                    "type": "result",
+                    "message": f"✅ [{match['food_type']}]의 검사 항목: {match['test_items']}"
+                }
+            else:
+                options = [m["food_type"] for m in all_matches]
+                return {
+                    "type": "selection",
+                    "message": f"📋 '{food_type}'(으)로 끝나는 항목이 여러 개 있습니다. 아래에서 선택해주세요:",
+                    "options": options,
+                    "matches": all_matches
+                }
+
+        return {"type": "error", "message": f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."}
 
     except Exception as e:
         logging.error(f"오류 발생: {e}")
-        return "❌ 검사 항목 정보를 가져오는 중 오류가 발생했습니다."
+        return {"type": "error", "message": "❌ 검사 항목 정보를 가져오는 중 오류가 발생했습니다."}
 
 
 def shutdown_driver():
@@ -480,11 +544,34 @@ def chatbot():
         increment_usage(user_id, "text")
         user_usage = get_user_usage(user_id)
 
-        result = get_inspection_items(user_data.get("분야"), user_input)
-        response_text = result
+        # 검사항목 선택 대기 중인 경우, 저장된 정보로 결과 반환
+        if "pending_items_selection" in user_data:
+            pending = user_data["pending_items_selection"]
+            # 선택한 항목 찾기
+            for match in pending["matches"]:
+                if match["food_type"] == user_input or normalize_text(match["food_type"]) == normalize_text(user_input):
+                    response_text = f"✅ [{match['food_type']}]의 검사 항목: {match['test_items']}"
+                    break
+            else:
+                response_text = f"❌ '{user_input}'을(를) 찾을 수 없습니다."
+            del user_data["pending_items_selection"]
+        else:
+            result = get_inspection_items(user_data.get("분야"), user_input)
 
-        # 3회 이상 검색 시 이미지 업로드 안내
-        if user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
+            if result["type"] == "selection":
+                # 식품유형 선택 필요 - 옵션 제공
+                response_text = result["message"]
+                user_data["pending_items_selection"] = {
+                    "matches": result["matches"]
+                }
+                # 식품 유형들을 quickReplies로 추가
+                response_buttons = ["검사주기", "검사항목"] + result["options"]
+            else:
+                # 결과 또는 에러
+                response_text = result["message"]
+
+        # 3회 이상 검색 시 이미지 업로드 안내 (선택 대기 중이 아닐 때만)
+        if "pending_items_selection" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
             response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
