@@ -228,42 +228,64 @@ def chatbot():
                 result = get_inspection_item(user_data["분야"], food_type)
 
                 if result:
+                    # 검색 성공 시 실패 횟수 초기화
+                    user_data["실패횟수"] = 0
                     response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                    return make_response(response_text, ["종료"])
                 else:
+                    # 실패 횟수 증가
+                    user_data["실패횟수"] = user_data.get("실패횟수", 0) + 1
+
                     # 유사 검색 (2글자 이상 공통)
                     similar = find_similar_items(user_data["분야"], food_type)
-                    if similar:
-                        suggestions = ", ".join(similar)
-                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
-                        response_text += f"\n\n🔍 유사한 항목: {suggestions}"
+
+                    if user_data["실패횟수"] >= 2:
+                        # 2회 이상 실패 시 이미지 업로드 안내
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n"
+                        response_text += "📷 식품유형을 찾기 어려우시면 아래 서류 중 하나를 사진으로 올려주세요:\n"
+                        response_text += "• 품목제조보고서\n• 영업등록증\n• 영업신고증\n• 허가증\n\n"
+                        response_text += "서류에서 '식품의 유형'을 확인해 드리겠습니다."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
                         response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
-                # 연속 조회 안내 (상태 유지)
-                if result:
-                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
-                return make_response(response_text, ["종료"])
+                    return make_response(response_text, ["종료"])
 
             elif user_data["기능"] == "검사주기" and user_data.get("업종"):
                 # DB에서 검사주기 조회
                 result = get_inspection_cycle(user_data["분야"], user_data["업종"], food_type)
 
                 if result:
+                    # 검색 성공 시 실패 횟수 초기화
+                    user_data["실패횟수"] = 0
                     response_text = f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                    return make_response(response_text, ["종료"])
                 else:
+                    # 실패 횟수 증가
+                    user_data["실패횟수"] = user_data.get("실패횟수", 0) + 1
+
                     # 유사 검색 (2글자 이상 공통)
                     similar = find_similar_cycles(user_data["분야"], user_data["업종"], food_type)
-                    if similar:
-                        suggestions = ", ".join(similar)
-                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
-                        response_text += f"\n\n🔍 유사한 항목: {suggestions}"
+
+                    if user_data["실패횟수"] >= 2:
+                        # 2회 이상 실패 시 이미지 업로드 안내
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n"
+                        response_text += "📷 식품유형을 찾기 어려우시면 아래 서류 중 하나를 사진으로 올려주세요:\n"
+                        response_text += "• 품목제조보고서\n• 영업등록증\n• 영업신고증\n• 허가증\n\n"
+                        response_text += "서류에서 '식품의 유형'을 확인해 드리겠습니다."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
                         response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        if similar:
+                            response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
-                # 연속 조회 안내 (상태 유지)
-                if result:
-                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
-                return make_response(response_text, ["종료"])
+                    return make_response(response_text, ["종료"])
 
         # 기본 응답
         return make_response(
