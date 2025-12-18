@@ -208,6 +208,9 @@ def get_similarity_score(word1, word2):
     """두 단어의 유사도 점수 반환 (0-100)"""
     word1 = normalize_text(word1)
     word2 = normalize_text(word2)
+    # 길이가 짧은 검색어는 ratio만 사용 (partial_ratio는 포함 관계에서 높은 점수를 줌)
+    if len(word1) <= 2:
+        return fuzz.ratio(word1, word2)
     return max(fuzz.ratio(word1, word2), fuzz.partial_ratio(word1, word2))
 
 
@@ -221,6 +224,14 @@ def find_similar_words(search_word, all_food_types, threshold=50, limit=5):
         # 괄호 앞 부분만 추출
         ft_base = ft.split('(')[0].strip()
         normalized_ft = normalize_text(ft_base)
+
+        # 검색어로 시작하는 단어 제외 (예: "햄" 검색 시 "햄버거류" 제외)
+        if normalized_ft.startswith(normalized_search) and normalized_ft != normalized_search:
+            continue
+
+        # 검색어로 끝나는 단어 제외 (endswith 매칭에서 처리됨)
+        if normalized_ft.endswith(normalized_search) and normalized_ft != normalized_search:
+            continue
 
         score = get_similarity_score(normalized_search, normalized_ft)
         if score >= threshold:
