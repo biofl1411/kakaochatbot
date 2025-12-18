@@ -219,7 +219,7 @@ def fix_spacing(text):
 def get_inspection_cycle(category, industry, food_type):
     url = url_mapping.get("검사주기", {}).get(category)
     if not url:
-        return "❌ 검사주기 정보를 찾을 수 없습니다."
+        return {"type": "error", "message": "❌ 검사주기 정보를 찾을 수 없습니다."}
 
     driver = get_driver()
     try:
@@ -230,14 +230,15 @@ def get_inspection_cycle(category, industry, food_type):
         target_id = industry_mapping.get(industry)
         target_element = soup.find("div", class_="needpopup answerPop", id=target_id)
         if not target_element:
-            return "❌ 검사주기 정보를 찾을 수 없습니다."
+            return {"type": "error", "message": "❌ 검사주기 정보를 찾을 수 없습니다."}
 
         table = target_element.find("table")
         if not table:
-            return "❌ 검사주기 테이블을 찾을 수 없습니다."
+            return {"type": "error", "message": "❌ 검사주기 테이블을 찾을 수 없습니다."}
 
         rows = table.find_all("tr")[1:]
 
+        # 1단계: 식품군(food_group)과 정확히 일치하는지 확인
         for row in rows:
             columns = row.find_all("td", recursive=False)
             if len(columns) < 4:
@@ -252,14 +253,28 @@ def get_inspection_cycle(category, industry, food_type):
 
             food_type_list = [ft.strip() for ft in food_type_text.split(',')]
 
-            if any(is_similar(food_type, ft) for ft in food_type_list):
-                return f"✅ [{current_food_group}] {food_type}의 검사주기: {cycle}"
+            # 식품군과 정확히 일치하고, 식품유형이 여러 개인 경우 선택 요청
+            if is_similar(food_type, current_food_group) and len(food_type_list) > 1:
+                return {
+                    "type": "selection",
+                    "message": f"📋 [{current_food_group}]에는 여러 식품 유형이 있습니다. 아래에서 선택해주세요:",
+                    "options": food_type_list,
+                    "food_group": current_food_group,
+                    "cycle": cycle
+                }
 
-        return "❌ 해당 식품 유형의 검사주기를 찾을 수 없습니다."
+            # 식품유형과 정확히 일치하는 경우
+            if any(is_similar(food_type, ft) for ft in food_type_list):
+                return {
+                    "type": "result",
+                    "message": f"✅ [{current_food_group}] {food_type}의 검사주기: {cycle}"
+                }
+
+        return {"type": "error", "message": "❌ 해당 식품 유형의 검사주기를 찾을 수 없습니다."}
 
     except Exception as e:
         logging.error(f"오류 발생: {e}")
-        return "❌ 검사주기 정보를 가져오는 중 오류가 발생했습니다."
+        return {"type": "error", "message": "❌ 검사주기 정보를 가져오는 중 오류가 발생했습니다."}
 
 
 def get_inspection_items(category, food_type):
@@ -336,11 +351,29 @@ def chatbot():
         increment_usage(user_id, "text")
         user_usage = get_user_usage(user_id)
 
-        result = get_inspection_cycle(user_data.get("분야"), user_data.get("업종"), user_input)
-        response_text = result
+        # 식품군 선택 대기 중인 경우, 저장된 정보로 결과 반환
+        if "pending_selection" in user_data:
+            pending = user_data["pending_selection"]
+            response_text = f"✅ [{pending['food_group']}] {user_input}의 검사주기: {pending['cycle']}"
+            del user_data["pending_selection"]
+        else:
+            result = get_inspection_cycle(user_data.get("분야"), user_data.get("업종"), user_input)
 
-        # 3회 이상 검색 시 이미지 업로드 안내
-        if user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
+            if result["type"] == "selection":
+                # 식품군 선택 필요 - 옵션 제공
+                response_text = result["message"]
+                user_data["pending_selection"] = {
+                    "food_group": result["food_group"],
+                    "cycle": result["cycle"]
+                }
+                # 식품 유형들을 quickReplies로 추가
+                response_buttons = ["검사주기", "검사항목"] + result["options"]
+            else:
+                # 결과 또는 에러
+                response_text = result["message"]
+
+        # 3회 이상 검색 시 이미지 업로드 안내 (선택 대기 중이 아닐 때만)
+        if "pending_selection" not in user_data and user_usage["text_search"] >= MAX_TEXT_SEARCH_BEFORE_IMAGE:
             response_text += "\n\n📷 검색 횟수가 3회 이상입니다. 식품 유형이 적힌 아래 서류 중 하나의 이미지를 올려주세요.\n1. 품목제조보고서\n2. 영업신고증\n3. 영업등록증\n4. 허가증"
             response_buttons.append("이미지 업로드")
 
