@@ -1,14 +1,13 @@
 """
 스케줄러 모듈
-- 주기적으로 크롤링 실행
-- 서버와 함께 실행하거나 별도로 실행 가능
+- 매일 지정된 시간에 크롤링 실행
 """
 import time
 import threading
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from config import CRAWL_INTERVAL_HOURS, LOG_FILE, LOG_FORMAT
+from config import CRAWL_HOUR, CRAWL_MINUTE, LOG_FILE, LOG_FORMAT
 from crawler import run_crawler
 from models import init_database
 
@@ -25,28 +24,46 @@ logger = logging.getLogger(__name__)
 
 
 class CrawlScheduler:
-    """크롤링 스케줄러"""
+    """크롤링 스케줄러 (매일 지정 시간 실행)"""
 
-    def __init__(self, interval_hours: int = CRAWL_INTERVAL_HOURS):
-        self.interval_seconds = interval_hours * 3600
+    def __init__(self, hour: int = CRAWL_HOUR, minute: int = CRAWL_MINUTE):
+        self.hour = hour
+        self.minute = minute
         self._stop_event = threading.Event()
         self._thread = None
 
+    def _get_next_run_time(self) -> datetime:
+        """다음 크롤링 시간 계산"""
+        now = datetime.now()
+        next_run = now.replace(hour=self.hour, minute=self.minute, second=0, microsecond=0)
+
+        # 오늘 예정 시간이 이미 지났으면 내일로
+        if next_run <= now:
+            next_run += timedelta(days=1)
+
+        return next_run
+
     def _run_loop(self):
         """스케줄러 루프"""
-        logger.info(f"스케줄러 시작 (주기: {self.interval_seconds // 3600}시간)")
+        logger.info(f"스케줄러 시작 (매일 {self.hour:02d}:{self.minute:02d} 실행)")
 
         while not self._stop_event.is_set():
+            next_run = self._get_next_run_time()
+            wait_seconds = (next_run - datetime.now()).total_seconds()
+
+            logger.info(f"다음 크롤링: {next_run.strftime('%Y-%m-%d %H:%M')} ({wait_seconds/3600:.1f}시간 후)")
+
+            # 다음 크롤링 시간까지 대기
+            if self._stop_event.wait(wait_seconds):
+                break  # 중지 요청됨
+
+            # 크롤링 실행
             try:
-                logger.info(f"[{datetime.now()}] 크롤링 시작")
+                logger.info(f"[{datetime.now()}] 예약 크롤링 시작")
                 count = run_crawler()
-                logger.info(f"[{datetime.now()}] 크롤링 완료: {count}개 데이터")
+                logger.info(f"[{datetime.now()}] 예약 크롤링 완료: {count}개 데이터")
             except Exception as e:
                 logger.error(f"크롤링 오류: {e}")
-
-            # 다음 크롤링까지 대기
-            logger.info(f"다음 크롤링: {self.interval_seconds // 3600}시간 후")
-            self._stop_event.wait(self.interval_seconds)
 
     def start(self, run_immediately: bool = True):
         """스케줄러 시작 (백그라운드 스레드)"""

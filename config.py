@@ -45,8 +45,9 @@ ITEM_POPUP_MAPPING = {
     "축산": "question_243"
 }
 
-# 스케줄러 설정 (크롤링 주기: 시간 단위)
-CRAWL_INTERVAL_HOURS = 1
+# 스케줄러 설정 (매일 크롤링 시간)
+CRAWL_HOUR = 7  # 오전 7시
+CRAWL_MINUTE = 0
 
 # 로깅 설정
 LOG_FILE = os.path.join(LOG_DIR, "chatbot.log")
