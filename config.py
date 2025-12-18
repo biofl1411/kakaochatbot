@@ -31,12 +31,18 @@ URL_MAPPING = {
     }
 }
 
-# 업종 매핑
+# 업종 매핑 (검사주기)
 INDUSTRY_MAPPING = {
     "식품제조가공업": "question_236",
     "즉석판매제조가공업": "question_239",
     "축산물제조가공업": "question_240",
     "축산물즉석판매제조가공업": "question_246"
+}
+
+# 검사항목 팝업 ID 매핑
+ITEM_POPUP_MAPPING = {
+    "식품": "question_241",
+    "축산": "question_243"
 }
 
 # 스케줄러 설정 (크롤링 주기: 시간 단위)

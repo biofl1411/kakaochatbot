@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import traceback
 
-from config import URL_MAPPING, INDUSTRY_MAPPING, LOG_FILE, LOG_FORMAT
+from config import URL_MAPPING, INDUSTRY_MAPPING, ITEM_POPUP_MAPPING, LOG_FILE, LOG_FORMAT
 from models import (
     save_inspection_item,
     save_inspection_cycle,
@@ -65,7 +65,7 @@ class Crawler:
 
     def crawl_inspection_items(self, category: str) -> int:
         """
-        검사항목 크롤링 (requests 사용 - 가벼움)
+        검사항목 크롤링 (Selenium 사용 - 팝업 요소에서 데이터 추출)
 
         Args:
             category: "식품" 또는 "축산"
@@ -77,25 +77,44 @@ class Crawler:
             logger.error(f"검사항목 URL을 찾을 수 없음: {category}")
             return 0
 
-        try:
-            logger.info(f"검사항목 크롤링 시작: {category}")
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
+        target_id = ITEM_POPUP_MAPPING.get(category)
+        if not target_id:
+            logger.error(f"검사항목 팝업 ID를 찾을 수 없음: {category}")
+            return 0
 
-            soup = BeautifulSoup(response.content, "html.parser")
-            tables = soup.find_all("table")
+        try:
+            driver = self._get_driver()
+            logger.info(f"검사항목 크롤링 시작: {category} (팝업 ID: {target_id})")
+
+            driver.get(url)
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+
+            # 팝업 요소에서 테이블 찾기
+            target_element = soup.find("div", class_="needpopup answerPop", id=target_id)
+            if not target_element:
+                logger.warning(f"검사항목 팝업 요소를 찾을 수 없음: {category} (ID: {target_id})")
+                return 0
+
+            table = target_element.find("table")
+            if not table:
+                logger.warning(f"검사항목 테이블을 찾을 수 없음: {category}")
+                return 0
 
             count = 0
-            for table in tables:
-                rows = table.find_all("tr")[1:]  # 헤더 제외
-                for row in rows:
-                    columns = row.find_all("td", recursive=False)
-                    if len(columns) >= 3:
-                        food_type = columns[1].get_text(strip=True)
-                        items = columns[2].get_text(strip=True)
-                        if food_type and items:
-                            save_inspection_item(category, food_type, items)
-                            count += 1
+            rows = table.find_all("tr")[1:]  # 헤더 제외
+
+            for row in rows:
+                columns = row.find_all("td", recursive=False)
+                if len(columns) >= 3:
+                    food_type = columns[1].get_text(strip=True)
+                    items = columns[2].get_text(strip=True)
+                    if food_type and items:
+                        save_inspection_item(category, food_type, items)
+                        count += 1
 
             logger.info(f"검사항목 크롤링 완료: {category}, {count}개 저장")
             return count
@@ -123,7 +142,7 @@ class Crawler:
         if category == "식품":
             industries = ["식품제조가공업", "즉석판매제조가공업"]
         else:
-            industries = ["축산물제조가공업", "식육즙판매가공업"]
+            industries = ["축산물제조가공업", "축산물즉석판매제조가공업"]
 
         total_count = 0
 
