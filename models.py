@@ -4,6 +4,7 @@
 """
 import sqlite3
 from datetime import datetime
+from rapidfuzz import fuzz
 from config import DATABASE_PATH
 
 
@@ -184,6 +185,70 @@ def search_inspection_cycles(category: str, industry: str, keyword: str) -> list
     conn.close()
 
     return [dict(row) for row in results]
+
+
+# ===== 유사 단어 검색 =====
+
+def get_all_food_types_items(category: str) -> list:
+    """검사항목의 모든 식품 유형 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT food_type FROM inspection_items
+        WHERE category = ?
+    """, (category,))
+    results = cursor.fetchall()
+    conn.close()
+    return [row['food_type'] for row in results]
+
+
+def get_all_food_types_cycles(category: str, industry: str) -> list:
+    """검사주기의 모든 식품 유형 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT food_type FROM inspection_cycles
+        WHERE category = ? AND industry = ?
+    """, (category, industry))
+    results = cursor.fetchall()
+    conn.close()
+    return [row['food_type'] for row in results]
+
+
+def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list:
+    """검사항목에서 유사한 식품 유형 찾기 (2글자 이상 공통)"""
+    all_types = get_all_food_types_items(category)
+    similar = []
+
+    for food_type in all_types:
+        # 공통 글자 수 체크
+        common_chars = set(keyword) & set(food_type)
+        if len(common_chars) >= 2:
+            score = fuzz.partial_ratio(keyword, food_type)
+            if score >= min_score:
+                similar.append((food_type, score))
+
+    # 점수순 정렬
+    similar.sort(key=lambda x: x[1], reverse=True)
+    return [item[0] for item in similar[:5]]
+
+
+def find_similar_cycles(category: str, industry: str, keyword: str, min_score: int = 40) -> list:
+    """검사주기에서 유사한 식품 유형 찾기 (2글자 이상 공통)"""
+    all_types = get_all_food_types_cycles(category, industry)
+    similar = []
+
+    for food_type in all_types:
+        # 공통 글자 수 체크
+        common_chars = set(keyword) & set(food_type)
+        if len(common_chars) >= 2:
+            score = fuzz.partial_ratio(keyword, food_type)
+            if score >= min_score:
+                similar.append((food_type, score))
+
+    # 점수순 정렬
+    similar.sort(key=lambda x: x[1], reverse=True)
+    return [item[0] for item in similar[:5]]
 
 
 # ===== 크롤링 로그 =====

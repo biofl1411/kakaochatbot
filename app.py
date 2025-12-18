@@ -14,6 +14,8 @@ from models import (
     get_inspection_cycle,
     search_inspection_items,
     search_inspection_cycles,
+    find_similar_items,
+    find_similar_cycles,
     get_last_crawl_time
 )
 
@@ -228,16 +230,18 @@ def chatbot():
                 if result:
                     response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
                 else:
-                    # 유사 검색
-                    similar = search_inspection_items(user_data["분야"], food_type)
+                    # 유사 검색 (2글자 이상 공통)
+                    similar = find_similar_items(user_data["분야"], food_type)
                     if similar:
-                        suggestions = ", ".join([r['food_type'] for r in similar[:5]])
-                        response_text = f"❌ '{food_type}'에 대한 정확한 정보를 찾을 수 없습니다.\n\n유사한 항목: {suggestions}"
+                        suggestions = ", ".join(similar)
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text += f"\n\n🔍 유사한 항목: {suggestions}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
 
                 # 연속 조회 안내 (상태 유지)
-                response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                if result:
+                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                 return make_response(response_text, ["종료"])
 
             elif user_data["기능"] == "검사주기" and user_data.get("업종"):
@@ -247,16 +251,18 @@ def chatbot():
                 if result:
                     response_text = f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
                 else:
-                    # 유사 검색
-                    similar = search_inspection_cycles(user_data["분야"], user_data["업종"], food_type)
+                    # 유사 검색 (2글자 이상 공통)
+                    similar = find_similar_cycles(user_data["분야"], user_data["업종"], food_type)
                     if similar:
-                        suggestions = ", ".join([r['food_type'] for r in similar[:5]])
-                        response_text = f"❌ '{food_type}'에 대한 정확한 정보를 찾을 수 없습니다.\n\n유사한 항목: {suggestions}"
+                        suggestions = ", ".join(similar)
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text += f"\n\n🔍 유사한 항목: {suggestions}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다."
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
 
                 # 연속 조회 안내 (상태 유지)
-                response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                if result:
+                    response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                 return make_response(response_text, ["종료"])
 
         # 기본 응답
