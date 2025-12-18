@@ -87,8 +87,8 @@ def chatbot():
         # 기본 버튼
         default_buttons = ["검사주기", "검사항목", "처음으로"]
 
-        # "처음으로" 입력 시 상태 초기화
-        if user_input == "처음으로":
+        # "처음으로" 또는 "종료" 입력 시 상태 초기화
+        if user_input in ["처음으로", "종료"]:
             reset_user_state(user_id)
             return make_response(
                 "안녕하세요! 바이오에프엘 검사 안내 챗봇입니다.\n\n원하시는 서비스를 선택해주세요.",
@@ -165,8 +165,9 @@ def chatbot():
                     else:
                         response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다."
 
-                reset_user_state(user_id)
-                return make_response(response_text, default_buttons)
+                # 연속 조회 안내 (상태 유지)
+                response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                return make_response(response_text, ["종료"])
 
             elif user_data["기능"] == "검사주기" and user_data.get("업종"):
                 # DB에서 검사주기 조회
@@ -183,8 +184,9 @@ def chatbot():
                     else:
                         response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다."
 
-                reset_user_state(user_id)
-                return make_response(response_text, default_buttons)
+                # 연속 조회 안내 (상태 유지)
+                response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                return make_response(response_text, ["종료"])
 
         # 기본 응답
         return make_response(
