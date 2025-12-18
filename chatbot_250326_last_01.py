@@ -194,6 +194,28 @@ def is_similar(word1, word2, threshold=100):
     return fuzz.ratio(word1, word2) >= threshold or fuzz.partial_ratio(word1, word2) >= threshold
 
 
+def fix_spacing(text):
+    """크롤링된 텍스트의 띄어쓰기 오류 수정"""
+    # 띄어쓰기 수정 패턴 (붙어있는 것 → 띄어쓰기 추가)
+    spacing_fixes = [
+        ("이상크림을", "이상 크림을"),
+        ("이상(크림을", "이상 (크림을"),
+        ("바르거나안에", "바르거나 안에"),
+        ("위에바르거나", "위에 바르거나"),
+        ("것만해당", "것만 해당"),
+        ("넣은것만", "넣은 것만"),
+        ("채워넣은", "채워 넣은"),
+        ("1회이상", "1회 이상"),
+        ("9월1회", "9월 1회"),
+        ("1월1회", "1월 1회"),
+    ]
+
+    for old, new in spacing_fixes:
+        text = text.replace(old, new)
+
+    return text
+
+
 def get_inspection_cycle(category, industry, food_type):
     url = url_mapping.get("검사주기", {}).get(category)
     if not url:
@@ -224,6 +246,9 @@ def get_inspection_cycle(category, industry, food_type):
             current_food_group = columns[1].get_text(strip=True)
             food_type_text = columns[2].get_text(strip=True)
             cycle = columns[3].get_text(strip=True)
+
+            # 띄어쓰기 오류 수정
+            cycle = fix_spacing(cycle)
 
             food_type_list = [ft.strip() for ft in food_type_text.split(',')]
 
