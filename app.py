@@ -61,6 +61,65 @@ def make_response(text: str, buttons: list = None):
     return jsonify(response)
 
 
+def make_carousel_response(title: str, cards: list, buttons: list = None):
+    """카카오 챗봇 캐러셀 응답 형식 생성
+
+    cards: [
+        {
+            "title": "카드 제목",
+            "description": "카드 설명",
+            "thumbnail": "이미지 URL (선택)",
+            "buttons": [{"label": "버튼", "action": "message", "messageText": "메시지"}]
+        }
+    ]
+    """
+    carousel_items = []
+    for card in cards:
+        item = {
+            "title": card.get("title", ""),
+            "description": card.get("description", "")
+        }
+
+        # 썸네일 이미지 (선택)
+        if card.get("thumbnail"):
+            item["thumbnail"] = {"imageUrl": card["thumbnail"]}
+
+        # 버튼 추가
+        if card.get("buttons"):
+            item["buttons"] = []
+            for btn in card["buttons"]:
+                item["buttons"].append({
+                    "label": btn.get("label", ""),
+                    "action": "message",
+                    "messageText": btn.get("messageText", btn.get("label", ""))
+                })
+
+        carousel_items.append(item)
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "carousel": {
+                        "type": "basicCard",
+                        "items": carousel_items
+                    }
+                }
+            ]
+        }
+    }
+
+    # 퀵리플라이 버튼 추가
+    if buttons:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in buttons
+        ]
+
+    return jsonify(response)
+
+
 def reset_user_state(user_id: str):
     """사용자 상태 초기화"""
     user_state[user_id] = {}
@@ -217,6 +276,61 @@ def chatbot():
             response_text += "🔗 홈페이지: www.biofl.co.kr"
 
             return make_response(response_text, ["결제수단", "처음으로"])
+
+        # ===== 검사분야 (캐러셀) =====
+        if user_input == "검사분야":
+            cards = [
+                {
+                    "title": "식품",
+                    "description": "식품 분야 검사항목 및 검사주기 안내",
+                    "buttons": [
+                        {"label": "검사항목", "messageText": "식품 검사항목"},
+                        {"label": "검사주기", "messageText": "식품 검사주기"}
+                    ]
+                },
+                {
+                    "title": "축산",
+                    "description": "축산 분야 검사항목 및 검사주기 안내",
+                    "buttons": [
+                        {"label": "검사항목", "messageText": "축산 검사항목"},
+                        {"label": "검사주기", "messageText": "축산 검사주기"}
+                    ]
+                }
+            ]
+            return make_carousel_response("검사분야 선택", cards, ["처음으로"])
+
+        # 검사분야 캐러셀에서 선택한 경우 처리
+        if user_input == "식품 검사항목":
+            user_data["기능"] = "검사항목"
+            user_data["분야"] = "식품"
+            return make_response(
+                "[식품] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등",
+                ["처음으로"]
+            )
+
+        if user_input == "축산 검사항목":
+            user_data["기능"] = "검사항목"
+            user_data["분야"] = "축산"
+            return make_response(
+                "[축산] 검사할 식품 유형을 입력해주세요.\n\n예: 소시지, 햄, 베이컨 등",
+                ["처음으로"]
+            )
+
+        if user_input == "식품 검사주기":
+            user_data["기능"] = "검사주기"
+            user_data["분야"] = "식품"
+            return make_response(
+                "[식품] 검사할 업종을 선택해주세요.",
+                ["식품제조가공업", "즉석판매제조가공업", "처음으로"]
+            )
+
+        if user_input == "축산 검사주기":
+            user_data["기능"] = "검사주기"
+            user_data["분야"] = "축산"
+            return make_response(
+                "[축산] 검사할 업종을 선택해주세요.",
+                ["축산물제조가공업", "축산물즉석판매제조가공업", "처음으로"]
+            )
 
         # ===== 상담원 연결 =====
         if user_input == "상담원 연결":
