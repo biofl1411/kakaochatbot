@@ -139,6 +139,38 @@ def get_inspection_item(category: str, food_type: str) -> dict:
     return None
 
 
+def get_inspection_item_all_matches(category: str, food_type: str) -> list:
+    """검사항목 조회 - 모든 매칭 결과 반환 (정확일치 또는 끝나는일치)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 띄어쓰기 제거한 검색어
+    search_key = food_type.replace(" ", "")
+
+    # 1. 정확히 일치하는 경우
+    cursor.execute("""
+        SELECT * FROM inspection_items
+        WHERE category = ? AND REPLACE(food_type, ' ', '') = ?
+    """, (category, search_key))
+    result = cursor.fetchone()
+    if result:
+        conn.close()
+        return [dict(result)]  # 정확 일치는 1개만 반환
+
+    # 2. 검색어로 끝나는 경우 (예: "당" → "포도당", "과당", "올리고당")
+    cursor.execute("""
+        SELECT * FROM inspection_items
+        WHERE category = ? AND REPLACE(food_type, ' ', '') LIKE ?
+    """, (category, f"%{search_key}"))
+    results = cursor.fetchall()
+
+    # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
+    filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "") == search_key]
+
+    conn.close()
+    return filtered
+
+
 def search_inspection_items(category: str, keyword: str) -> list:
     """검사항목 검색 (유사 검색)"""
     conn = get_connection()
@@ -220,6 +252,38 @@ def get_inspection_cycle(category: str, industry: str, food_type: str) -> dict:
 
     conn.close()
     return None
+
+
+def get_inspection_cycle_all_matches(category: str, industry: str, food_type: str) -> list:
+    """검사주기 조회 - 모든 매칭 결과 반환 (정확일치 또는 끝나는일치)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 띄어쓰기 제거한 검색어
+    search_key = food_type.replace(" ", "")
+
+    # 1. 정확히 일치하는 경우
+    cursor.execute("""
+        SELECT * FROM inspection_cycles
+        WHERE category = ? AND industry = ? AND REPLACE(food_type, ' ', '') = ?
+    """, (category, industry, search_key))
+    result = cursor.fetchone()
+    if result:
+        conn.close()
+        return [dict(result)]  # 정확 일치는 1개만 반환
+
+    # 2. 검색어로 끝나는 경우 (예: "당" → "포도당", "과당", "올리고당")
+    cursor.execute("""
+        SELECT * FROM inspection_cycles
+        WHERE category = ? AND industry = ? AND REPLACE(food_type, ' ', '') LIKE ?
+    """, (category, industry, f"%{search_key}"))
+    results = cursor.fetchall()
+
+    # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
+    filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "") == search_key]
+
+    conn.close()
+    return filtered
 
 
 def search_inspection_cycles(category: str, industry: str, keyword: str) -> list:

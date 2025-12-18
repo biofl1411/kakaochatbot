@@ -11,7 +11,9 @@ from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT
 from models import (
     init_database,
     get_inspection_item,
+    get_inspection_item_all_matches,
     get_inspection_cycle,
+    get_inspection_cycle_all_matches,
     search_inspection_items,
     search_inspection_cycles,
     find_similar_items,
@@ -283,17 +285,29 @@ def chatbot():
             food_type = user_input
 
             if user_data["기능"] == "검사항목":
-                # DB에서 검사항목 조회
-                result = get_inspection_item(user_data["분야"], food_type)
+                # DB에서 검사항목 조회 - 모든 매칭 결과 확인
+                all_matches = get_inspection_item_all_matches(user_data["분야"], food_type)
 
-                if result:
-                    # 검색 성공 시 실패 횟수 초기화
+                if len(all_matches) > 1:
+                    # 여러 개 매칭 시 선택지 제공
+                    user_data["실패횟수"] = 0
+                    response_text = f"'{food_type}'(으)로 끝나는 식품유형이 {len(all_matches)}개 있습니다.\n\n"
+                    response_text += "원하시는 항목을 선택해주세요."
+
+                    # 버튼으로 선택지 제공 (최대 10개)
+                    buttons = [match['food_type'] for match in all_matches[:10]]
+                    buttons.append("종료")
+                    return make_response(response_text, buttons)
+
+                elif len(all_matches) == 1:
+                    # 1개 매칭 시 바로 결과 표시
+                    result = all_matches[0]
                     user_data["실패횟수"] = 0
                     response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
-                    # 실패 횟수 증가
+                    # 매칭 없음 - 실패 횟수 증가
                     user_data["실패횟수"] = user_data.get("실패횟수", 0) + 1
 
                     # 유사 검색 (2글자 이상 공통)
@@ -319,17 +333,29 @@ def chatbot():
                     return make_response(response_text, ["종료"])
 
             elif user_data["기능"] == "검사주기" and user_data.get("업종"):
-                # DB에서 검사주기 조회
-                result = get_inspection_cycle(user_data["분야"], user_data["업종"], food_type)
+                # DB에서 검사주기 조회 - 모든 매칭 결과 확인
+                all_matches = get_inspection_cycle_all_matches(user_data["분야"], user_data["업종"], food_type)
 
-                if result:
-                    # 검색 성공 시 실패 횟수 초기화
+                if len(all_matches) > 1:
+                    # 여러 개 매칭 시 선택지 제공
+                    user_data["실패횟수"] = 0
+                    response_text = f"'{food_type}'(으)로 끝나는 식품유형이 {len(all_matches)}개 있습니다.\n\n"
+                    response_text += "원하시는 항목을 선택해주세요."
+
+                    # 버튼으로 선택지 제공 (최대 10개)
+                    buttons = [match['food_type'] for match in all_matches[:10]]
+                    buttons.append("종료")
+                    return make_response(response_text, buttons)
+
+                elif len(all_matches) == 1:
+                    # 1개 매칭 시 바로 결과 표시
+                    result = all_matches[0]
                     user_data["실패횟수"] = 0
                     response_text = f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
-                    # 실패 횟수 증가
+                    # 매칭 없음 - 실패 횟수 증가
                     user_data["실패횟수"] = user_data.get("실패횟수", 0) + 1
 
                     # 유사 검색 (2글자 이상 공통)
