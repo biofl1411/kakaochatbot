@@ -8,9 +8,11 @@ from config import DATABASE_PATH
 
 
 def get_connection():
-    """데이터베이스 연결"""
-    conn = sqlite3.connect(DATABASE_PATH)
+    """데이터베이스 연결 (동시 접근 지원)"""
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    # WAL 모드: 읽기/쓰기 동시 접근 허용
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
