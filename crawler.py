@@ -33,6 +33,36 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def split_outside_parentheses(text: str) -> list:
+    """괄호 밖의 쉼표로만 문자열 분리
+
+    예: "즉석섭취식품(도시락, 김밥류), 즉석조리식품"
+    -> ["즉석섭취식품(도시락, 김밥류)", "즉석조리식품"]
+    """
+    result = []
+    current = ""
+    depth = 0
+
+    for char in text:
+        if char == '(':
+            depth += 1
+            current += char
+        elif char == ')':
+            depth -= 1
+            current += char
+        elif char == ',' and depth == 0:
+            if current.strip():
+                result.append(current.strip())
+            current = ""
+        else:
+            current += char
+
+    if current.strip():
+        result.append(current.strip())
+
+    return result
+
+
 class Crawler:
     """웹 크롤러 클래스"""
 
@@ -181,7 +211,8 @@ class Crawler:
                         cycle = columns[3].get_text(strip=True)
 
                         # 여러 식품 유형이 콤마로 구분된 경우 각각 저장
-                        food_types = [ft.strip() for ft in food_type_text.split(',')]
+                        # 괄호 안의 쉼표는 무시하고 분리
+                        food_types = split_outside_parentheses(food_type_text)
                         for food_type in food_types:
                             if food_type and cycle:
                                 save_inspection_cycle(category, industry, food_group, food_type, cycle)
