@@ -81,7 +81,7 @@ def make_carousel_response(cards: list, quick_replies: list = None):
     """카카오 챗봇 카드 캐러셀 응답 형식 생성
 
     Args:
-        cards: 카드 리스트. 각 카드는 dict로 {"title": str, "description": str, "buttons": list}
+        cards: 카드 리스트. 각 카드는 dict로 {"title": str, "description": str, "buttons": list, "thumbnail": str(optional)}
         quick_replies: 하단 퀵리플라이 버튼 리스트
     """
     items = []
@@ -98,6 +98,9 @@ def make_carousel_response(cards: list, quick_replies: list = None):
                 for btn in card.get("buttons", [])
             ]
         }
+        # 썸네일 이미지가 있으면 추가
+        if card.get("thumbnail"):
+            item["thumbnail"] = {"imageUrl": card["thumbnail"]}
         items.append(item)
 
     response = {
@@ -123,12 +126,17 @@ def make_carousel_response(cards: list, quick_replies: list = None):
     return jsonify(response)
 
 
+# 카드 썸네일 이미지 URL (민트색 배경)
+# TODO: 실제 이미지 URL로 교체 필요
+CARD_THUMBNAIL_URL = "https://via.placeholder.com/800x400/98D8C8/333333?text="
+
 # 검사 분야 메뉴 구조 정의
 INSPECTION_MENU = {
     "cards": [
         {
             "title": "기본 검사",
             "description": "자가품질검사, 영양성분, 소비기한",
+            "thumbnail": f"{CARD_THUMBNAIL_URL}Basic",
             "buttons": [
                 {"label": "자가품질검사"},
                 {"label": "영양성분검사"},
@@ -138,6 +146,7 @@ INSPECTION_MENU = {
         {
             "title": "잔류물질 검사",
             "description": "항생물질, 잔류농약, 방사능",
+            "thumbnail": f"{CARD_THUMBNAIL_URL}Residue",
             "buttons": [
                 {"label": "항생물질"},
                 {"label": "잔류농약"},
@@ -147,6 +156,7 @@ INSPECTION_MENU = {
         {
             "title": "인증 검사",
             "description": "비건, 할랄, 동물DNA",
+            "thumbnail": f"{CARD_THUMBNAIL_URL}Certification",
             "buttons": [
                 {"label": "비건"},
                 {"label": "할랄"},
@@ -156,6 +166,7 @@ INSPECTION_MENU = {
         {
             "title": "특수 검사",
             "description": "알레르기, 글루텐프리, 이물질",
+            "thumbnail": f"{CARD_THUMBNAIL_URL}Special",
             "buttons": [
                 {"label": "알레르기"},
                 {"label": "글루텐Free"},
@@ -165,6 +176,7 @@ INSPECTION_MENU = {
         {
             "title": "안내/문의",
             "description": "홈페이지, 성적서, 시료접수",
+            "thumbnail": f"{CARD_THUMBNAIL_URL}Info",
             "buttons": [
                 {"label": "홈페이지안내"},
                 {"label": "성적서문의"},
