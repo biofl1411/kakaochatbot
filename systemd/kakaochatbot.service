@@ -1,0 +1,17 @@
+[Unit]
+Description=Kakao Chatbot Service
+After=network.target
+
+[Service]
+Type=simple
+User=biofl
+Group=biofl
+WorkingDirectory=/home/biofl/kakaochatbot
+Environment="PATH=/home/biofl/kakaochatbot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="GOOGLE_APPLICATION_CREDENTIALS=/home/biofl/kakaochatbot/google-vision-key.json/project-e44a4fb2-b609-44d1-b84-d5b57ba39109.json"
+ExecStart=/home/biofl/kakaochatbot/venv/bin/python run.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
