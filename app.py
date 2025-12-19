@@ -134,8 +134,8 @@ CARD_THUMBNAIL_URL = "https://via.placeholder.com/800x400/98D8C8/333333?text="
 INSPECTION_MENU = {
     "cards": [
         {
-            "title": "기본 검사",
-            "description": "자가품질검사, 영양성분, 소비기한",
+            "title": "",
+            "description": "",
             "thumbnail": f"{CARD_THUMBNAIL_URL}Basic",
             "buttons": [
                 {"label": "자가품질검사"},
@@ -144,8 +144,8 @@ INSPECTION_MENU = {
             ]
         },
         {
-            "title": "잔류물질 검사",
-            "description": "항생물질, 잔류농약, 방사능",
+            "title": "",
+            "description": "",
             "thumbnail": f"{CARD_THUMBNAIL_URL}Residue",
             "buttons": [
                 {"label": "항생물질"},
@@ -154,8 +154,8 @@ INSPECTION_MENU = {
             ]
         },
         {
-            "title": "인증 검사",
-            "description": "비건, 할랄, 동물DNA",
+            "title": "",
+            "description": "",
             "thumbnail": f"{CARD_THUMBNAIL_URL}Certification",
             "buttons": [
                 {"label": "비건"},
@@ -164,8 +164,8 @@ INSPECTION_MENU = {
             ]
         },
         {
-            "title": "특수 검사",
-            "description": "알레르기, 글루텐프리, 이물질",
+            "title": "",
+            "description": "",
             "thumbnail": f"{CARD_THUMBNAIL_URL}Special",
             "buttons": [
                 {"label": "알레르기"},
@@ -174,8 +174,8 @@ INSPECTION_MENU = {
             ]
         },
         {
-            "title": "안내/문의",
-            "description": "홈페이지, 성적서, 시료접수",
+            "title": "",
+            "description": "",
             "thumbnail": f"{CARD_THUMBNAIL_URL}Info",
             "buttons": [
                 {"label": "홈페이지안내"},
