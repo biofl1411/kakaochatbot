@@ -5,3 +5,4 @@ data/
 logs/
 server.log
 *.pyc
+*.db
