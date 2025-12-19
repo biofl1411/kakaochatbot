@@ -128,10 +128,10 @@ def extract_food_type_from_text(ocr_text: str) -> str:
         patterns = [
             r'식품유형\s*[:\s]*([^\n\r,]+)',
             r'식품의유형\s*[:\s]*([^\n\r,]+)',
-            r'식품의\s*유형\s*[:\s]*([^\n\r,]+)',
+            r'식품의\s+유형\s*[:\s]*([^\n\r,]+)',
             r'품목유형\s*[:\s]*([^\n\r,]+)',
             r'제품유형\s*[:\s]*([^\n\r,]+)',
-            r'유\s*형\s*[:\s]*([^\n\r,]+)',
+            r'식품\s*의?\s*유형\s*[:\s]*([^\n\r,]+)',
         ]
 
         for pattern in patterns:
