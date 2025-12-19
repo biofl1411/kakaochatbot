@@ -2,8 +2,13 @@
 카카오 챗봇 API 서버
 - 카카오 i 오픈빌더 스킬 서버
 - DB에서 검사항목/검사주기 조회
+- GitHub Webhook 자동 배포
 """
 import re
+import os
+import hmac
+import hashlib
+import subprocess
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
@@ -82,6 +87,24 @@ def reset_user_state(user_id: str):
     user_state[user_id] = {}
 
 
+# Webhook 설정
+WEBHOOK_SECRET = os.environ.get('GITHUB_WEBHOOK_SECRET', '6582f3a101793fa86fd7090985a6f8ec1276f82f')
+DEPLOY_SCRIPT = '/home/biofl/kakaochatbot/deploy.sh'
+
+
+def verify_webhook_signature(payload_body, signature_header):
+    """GitHub webhook signature 검증"""
+    if not signature_header:
+        return False
+    hash_object = hmac.new(
+        WEBHOOK_SECRET.encode('utf-8'),
+        msg=payload_body,
+        digestmod=hashlib.sha256
+    )
+    expected_signature = "sha256=" + hash_object.hexdigest()
+    return hmac.compare_digest(expected_signature, signature_header)
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """헬스체크 엔드포인트"""
@@ -90,6 +113,41 @@ def health_check():
         "status": "ok",
         "last_crawl": str(last_crawl) if last_crawl else "never"
     })
+
+
+@app.route('/webhook', methods=['POST'])
+def github_webhook():
+    """GitHub Webhook 엔드포인트 - 자동 배포"""
+    # Signature 검증
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not verify_webhook_signature(request.data, signature):
+        logger.warning("Invalid webhook signature")
+        return jsonify({'error': 'Invalid signature'}), 401
+
+    # 이벤트 타입 확인
+    event = request.headers.get('X-GitHub-Event')
+    if event != 'push':
+        return jsonify({'message': f'Event {event} ignored'}), 200
+
+    # Payload 파싱
+    try:
+        payload = request.get_json()
+        ref = payload.get('ref', '')
+        branch = ref.replace('refs/heads/', '')
+        logger.info(f"Webhook received: push to {branch}")
+
+        # 배포 스크립트 실행 (백그라운드)
+        if os.path.exists(DEPLOY_SCRIPT):
+            subprocess.Popen(['bash', DEPLOY_SCRIPT],
+                           stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+            return jsonify({'message': 'Deployment started', 'branch': branch}), 200
+        else:
+            return jsonify({'error': 'Deploy script not found'}), 500
+
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/chatbot', methods=['POST'])
