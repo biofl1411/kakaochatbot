@@ -18,7 +18,8 @@ from models import (
     save_inspection_item,
     save_inspection_cycle,
     save_crawl_log,
-    init_database
+    init_database,
+    cleanup_corrupted_food_types
 )
 
 # 로깅 설정
@@ -261,6 +262,12 @@ class Crawler:
 def run_crawler():
     """크롤러 실행 (외부에서 호출용)"""
     init_database()
+
+    # 잘못된 데이터 정리 (괄호 오류 등)
+    deleted = cleanup_corrupted_food_types()
+    if deleted > 0:
+        logger.info(f"잘못된 데이터 {deleted}개 삭제 완료")
+
     crawler = Crawler()
     try:
         return crawler.crawl_all()

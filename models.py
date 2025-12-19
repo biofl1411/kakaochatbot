@@ -427,6 +427,45 @@ def find_similar_cycles(category: str, industry: str, keyword: str, min_score: i
     return [item[0] for item in similar[:5]]
 
 
+# ===== 데이터 정리 =====
+
+def cleanup_corrupted_food_types():
+    """잘못 분리된 식품유형 데이터 삭제
+
+    예: "샌드위치) 즉석조리식품" 같이 괄호가 잘못 포함된 데이터
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    deleted_count = 0
+
+    # 검사항목에서 잘못된 데이터 삭제
+    # 1. ")"로 시작하는 데이터
+    # 2. ")"가 있지만 "("가 없는 데이터
+    # 3. "("로 끝나는 데이터 (불완전한 괄호)
+    cursor.execute("""
+        DELETE FROM inspection_items
+        WHERE food_type LIKE ')%'
+           OR (food_type LIKE '%)%' AND food_type NOT LIKE '%(%')
+           OR food_type LIKE '%('
+    """)
+    deleted_count += cursor.rowcount
+
+    # 검사주기에서 잘못된 데이터 삭제
+    cursor.execute("""
+        DELETE FROM inspection_cycles
+        WHERE food_type LIKE ')%'
+           OR (food_type LIKE '%)%' AND food_type NOT LIKE '%(%')
+           OR food_type LIKE '%('
+    """)
+    deleted_count += cursor.rowcount
+
+    conn.commit()
+    conn.close()
+
+    return deleted_count
+
+
 # ===== 크롤링 로그 =====
 
 def save_crawl_log(crawl_type: str, status: str, message: str = None):
