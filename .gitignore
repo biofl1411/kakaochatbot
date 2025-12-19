@@ -1,0 +1,7 @@
+crawler_log.txt
+vision_api_usage.json
+__pycache__/
+data/
+logs/
+server.log
+*.pyc
