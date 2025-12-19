@@ -126,9 +126,8 @@ def make_carousel_response(cards: list, quick_replies: list = None):
     return jsonify(response)
 
 
-# 카드 썸네일 이미지 URL (민트색 배경)
-# TODO: 실제 이미지 URL로 교체 필요
-CARD_THUMBNAIL_URL = "https://via.placeholder.com/800x400/98D8C8/333333?text="
+# 카드 썸네일 이미지 URL
+CARD_IMAGE_BASE_URL = "http://14.7.14.31:5000/static/images/"
 
 # 검사 분야 메뉴 구조 정의
 INSPECTION_MENU = {
@@ -136,7 +135,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_THUMBNAIL_URL}Basic",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_01.jpg",
             "buttons": [
                 {"label": "자가품질검사"},
                 {"label": "영양성분검사"},
@@ -146,7 +145,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_THUMBNAIL_URL}Residue",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_02.jpg",
             "buttons": [
                 {"label": "항생물질"},
                 {"label": "잔류농약"},
@@ -156,7 +155,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_THUMBNAIL_URL}Certification",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_03.jpg",
             "buttons": [
                 {"label": "비건"},
                 {"label": "할랄"},
@@ -166,7 +165,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_THUMBNAIL_URL}Special",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_04.jpg",
             "buttons": [
                 {"label": "알레르기"},
                 {"label": "글루텐Free"},
@@ -176,7 +175,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_THUMBNAIL_URL}Info",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_05.jpg",
             "buttons": [
                 {"label": "홈페이지안내"},
                 {"label": "성적서문의"},
