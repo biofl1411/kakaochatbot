@@ -399,25 +399,39 @@ def chatbot():
 
             return make_response(response_text, ["처음으로"])
 
-        # ===== FAQ / 자주 묻는 질문 =====
-        if user_input in ["FAQ", "자주 묻는 질문", "자주묻는질문", "질문"]:
-            # FAQ 카드 캐러셀 생성
-            cards = []
-            for key in ["Q1", "Q2", "Q3", "Q4", "Q5"]:
-                faq = FAQ_DATA[key]
-                cards.append({
-                    "title": faq["title"],
-                    "description": faq["description"],
-                    "button_label": "자세히 보기",
-                    "button_action": faq["title"]
-                })
-
+        # ===== 검사분야 (카드 캐러셀) =====
+        if user_input in ["검사분야", "검사 분야"]:
+            cards = [
+                {
+                    "title": "영양성분검사",
+                    "description": "9대, 14대, 5대 영양성분 등",
+                    "button_label": "검사종류 보기",
+                    "button_action": "영양성분검사"
+                },
+                {
+                    "title": "미생물검사",
+                    "description": "일반세균, 대장균군 등",
+                    "button_label": "검사종류 보기",
+                    "button_action": "미생물검사"
+                },
+                {
+                    "title": "중금속검사",
+                    "description": "납, 카드뮴 등",
+                    "button_label": "검사종류 보기",
+                    "button_action": "중금속검사"
+                },
+                {
+                    "title": "잔류농약검사",
+                    "description": "농산물 잔류농약 분석",
+                    "button_label": "검사종류 보기",
+                    "button_action": "잔류농약검사"
+                }
+            ]
             return make_carousel_response(cards, ["처음으로"])
 
-        # FAQ 개별 질문 응답
-        for key, faq in FAQ_DATA.items():
-            if user_input == faq["title"] or user_input == key:
-                return make_response(faq["content"], ["FAQ", "처음으로"])
+        # 검사분야 개별 응답 (영양성분검사 → Q1 내용)
+        if user_input == "영양성분검사":
+            return make_response(FAQ_DATA["Q1"]["content"], ["검사분야", "처음으로"])
 
         # Step 1: 기능 선택
         if user_input in ["검사주기", "검사항목"]:
