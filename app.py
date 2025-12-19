@@ -341,7 +341,7 @@ def chatbot():
             else:
                 # 검사항목: 바로 식품 유형 입력
                 return make_response(
-                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n📷 품목제조보고서 이미지를 보내주시면 자동으로 식품유형을 추출합니다.",
+                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등",
                     ["처음으로"]
                 )
 
@@ -355,7 +355,7 @@ def chatbot():
 
             user_data["업종"] = user_input
             return make_response(
-                f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n📷 품목제조보고서 이미지를 보내주시면 자동으로 식품유형을 추출합니다.",
+                f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등",
                 ["처음으로"]
             )
 
@@ -398,8 +398,8 @@ def chatbot():
                         response_text += "📋 품목제조보고서 또는 영업등록증/신고증/허가증의 '식품유형'을 확인하여 다시 입력해주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
-                    elif user_data["실패횟수"] >= 2 and is_vision_api_available():
-                        # 2회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
+                    elif user_data["실패횟수"] >= 1 and is_vision_api_available():
+                        # 1회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
                         response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n"
                         response_text += "📷 품목제조보고서 또는 영업등록증/신고증/허가증 이미지를 업로드하시면 자동으로 식품유형을 찾아드립니다."
                         if similar:
@@ -449,8 +449,8 @@ def chatbot():
                             response_text += "📋 영업등록증 또는 신고증/허가증의 '식품유형'을 확인하여 다시 입력해주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
-                    elif user_data["실패횟수"] >= 2 and is_vision_api_available():
-                        # 2회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
+                    elif user_data["실패횟수"] >= 1 and is_vision_api_available():
+                        # 1회 이상 실패 시 이미지 업로드 안내 (Vision API 사용 가능 시)
                         response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n"
                         if user_data["업종"] in ["식품제조가공업", "축산물제조가공업"]:
                             response_text += "📷 품목제조보고서 이미지를 업로드하시면 자동으로 식품유형을 찾아드립니다."
