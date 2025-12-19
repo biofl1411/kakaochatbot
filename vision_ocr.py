@@ -89,7 +89,7 @@ def extract_food_type_from_image(image_url: str) -> dict:
         logger.info(f"OCR 결과: {full_text[:200]}...")
 
         # API 사용량 증가
-        increment_api_usage()
+        increment_api_usage('vision_api')
 
         # 식품유형 추출
         food_type = extract_food_type_from_text(full_text)
@@ -127,6 +127,7 @@ def extract_food_type_from_text(ocr_text: str) -> str:
         # 식품유형 패턴 매칭
         patterns = [
             r'식품유형\s*[:\s]*([^\n\r,]+)',
+            r'식품의유형\s*[:\s]*([^\n\r,]+)',
             r'식품의\s*유형\s*[:\s]*([^\n\r,]+)',
             r'품목유형\s*[:\s]*([^\n\r,]+)',
             r'제품유형\s*[:\s]*([^\n\r,]+)',
