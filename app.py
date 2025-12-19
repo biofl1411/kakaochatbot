@@ -126,8 +126,9 @@ def make_carousel_response(cards: list, quick_replies: list = None):
     return jsonify(response)
 
 
-# 카드 썸네일 이미지 URL
+# 카드 썸네일 이미지 URL (버전 파라미터로 캐시 무효화)
 CARD_IMAGE_BASE_URL = "http://14.7.14.31:5000/static/images/"
+CARD_IMAGE_VERSION = "?v=2"
 
 # 검사 분야 메뉴 구조 정의
 INSPECTION_MENU = {
@@ -135,7 +136,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_01.jpg",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_01.jpg{CARD_IMAGE_VERSION}",
             "buttons": [
                 {"label": "자가품질검사"},
                 {"label": "영양성분검사"},
@@ -145,7 +146,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_02.jpg",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_02.jpg{CARD_IMAGE_VERSION}",
             "buttons": [
                 {"label": "항생물질"},
                 {"label": "잔류농약"},
@@ -155,7 +156,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_03.jpg",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_03.jpg{CARD_IMAGE_VERSION}",
             "buttons": [
                 {"label": "비건"},
                 {"label": "할랄"},
@@ -165,7 +166,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_04.jpg",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_04.jpg{CARD_IMAGE_VERSION}",
             "buttons": [
                 {"label": "알레르기"},
                 {"label": "글루텐Free"},
@@ -175,7 +176,7 @@ INSPECTION_MENU = {
         {
             "title": "",
             "description": "",
-            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_05.jpg",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_05.jpg{CARD_IMAGE_VERSION}",
             "buttons": [
                 {"label": "홈페이지안내"},
                 {"label": "성적서문의"},
