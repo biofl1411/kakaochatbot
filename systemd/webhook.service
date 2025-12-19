@@ -1,0 +1,17 @@
+[Unit]
+Description=GitHub Webhook Receiver
+After=network.target
+
+[Service]
+Type=simple
+User=biofl
+Group=biofl
+WorkingDirectory=/home/biofl/kakaochatbot
+Environment="PATH=/home/biofl/kakaochatbot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="GITHUB_WEBHOOK_SECRET=your-webhook-secret-here"
+ExecStart=/home/biofl/kakaochatbot/venv/bin/python webhook.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
