@@ -399,39 +399,24 @@ def chatbot():
 
             return make_response(response_text, ["처음으로"])
 
-        # ===== 검사분야 (카드 캐러셀) =====
-        if user_input in ["검사분야", "검사 분야"]:
-            cards = [
-                {
-                    "title": "영양성분검사",
-                    "description": "9대, 14대, 5대 영양성분 등",
-                    "button_label": "검사종류 보기",
-                    "button_action": "영양성분검사"
-                },
-                {
-                    "title": "미생물검사",
-                    "description": "일반세균, 대장균군 등",
-                    "button_label": "검사종류 보기",
-                    "button_action": "미생물검사"
-                },
-                {
-                    "title": "중금속검사",
-                    "description": "납, 카드뮴 등",
-                    "button_label": "검사종류 보기",
-                    "button_action": "중금속검사"
-                },
-                {
-                    "title": "잔류농약검사",
-                    "description": "농산물 잔류농약 분석",
-                    "button_label": "검사종류 보기",
-                    "button_action": "잔류농약검사"
-                }
-            ]
-            return make_carousel_response(cards, ["처음으로"])
-
-        # 검사분야 개별 응답 (영양성분검사 → Q1 내용)
+        # ===== 영양성분검사 하위 메뉴 =====
+        # 영양성분검사 클릭 → 검사종류, 9대 영양성분, 14대 영양성분
         if user_input == "영양성분검사":
-            return make_response(FAQ_DATA["Q1"]["content"], ["검사분야", "처음으로"])
+            return make_response(
+                "🔬 영양성분검사\n\n원하시는 항목을 선택해주세요.",
+                ["검사종류", "9대 영양성분", "14대 영양성분", "처음으로"]
+            )
+
+        # 검사종류 클릭 → 영양표시 종류, 표시 대상 확인, 1회 제공환산표
+        if user_input == "검사종류":
+            return make_response(
+                "📋 검사종류\n\n원하시는 항목을 선택해주세요.",
+                ["영양표시 종류", "표시 대상 확인", "1회 제공환산표", "영양성분검사", "처음으로"]
+            )
+
+        # 영양표시 종류 클릭 → Q1 내용 표시
+        if user_input == "영양표시 종류":
+            return make_response(FAQ_DATA["Q1"]["content"], ["검사종류", "영양성분검사", "처음으로"])
 
         # Step 1: 기능 선택
         if user_input in ["검사주기", "검사항목"]:
