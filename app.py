@@ -87,12 +87,43 @@ def format_korean_spacing(text: str) -> str:
 
 
 def format_items_list(items_text: str) -> str:
-    """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환"""
+    """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환
+
+    괄호 [], () 안의 콤마는 항목 구분자가 아니므로 무시
+    """
     if not items_text:
         return items_text
 
-    # 콤마로 분리
-    items = [item.strip() for item in items_text.split(',') if item.strip()]
+    # 괄호 깊이를 추적하며 콤마로 분리
+    items = []
+    current_item = ""
+    bracket_depth = 0  # [] 깊이
+    paren_depth = 0    # () 깊이
+
+    for char in items_text:
+        if char == '[':
+            bracket_depth += 1
+            current_item += char
+        elif char == ']':
+            bracket_depth -= 1
+            current_item += char
+        elif char == '(':
+            paren_depth += 1
+            current_item += char
+        elif char == ')':
+            paren_depth -= 1
+            current_item += char
+        elif char == ',' and bracket_depth == 0 and paren_depth == 0:
+            # 괄호 밖의 콤마 -> 항목 구분자
+            if current_item.strip():
+                items.append(current_item.strip())
+            current_item = ""
+        else:
+            current_item += char
+
+    # 마지막 항목 추가
+    if current_item.strip():
+        items.append(current_item.strip())
 
     # 각 항목에 띄어쓰기 추가 후 bullet point로 포맷팅
     formatted_items = []
