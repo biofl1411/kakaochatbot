@@ -45,6 +45,64 @@ CORS(app)
 user_state = {}
 
 
+def format_korean_spacing(text: str) -> str:
+    """한국어 텍스트에 적절한 띄어쓰기 추가"""
+    if not text:
+        return text
+
+    # 조사/어미 앞에 붙어있는 단어들 사이에 띄어쓰기 추가
+    patterns = [
+        # ~에 한한다, ~에 한하며
+        (r'([가-힣])에한한다', r'\1에 한한다'),
+        (r'([가-힣])에한하며', r'\1에 한하며'),
+        # ~을/를 제외한다
+        (r'([가-힣])은제외한다', r'\1은 제외한다'),
+        (r'([가-힣])를제외한다', r'\1를 제외한다'),
+        # ~또는~
+        (r'([가-힣])또는([가-힣])', r'\1 또는 \2'),
+        # ~및~
+        (r'([가-힣])및([가-힣])', r'\1 및 \2'),
+        # ~의 합으로서
+        (r'의합으로서', r'의 합으로서'),
+        (r'의합으로 서', r'의 합으로서'),
+        # ~를 함유한
+        (r'를함유한', r'를 함유한'),
+        # ~이상~
+        (r'([0-9])이상', r'\1 이상'),
+        # ~미만~
+        (r'([0-9])미만', r'\1 미만'),
+        # ~이하~
+        (r'([0-9])이하', r'\1 이하'),
+        # ~초과~
+        (r'([0-9])초과', r'\1 초과'),
+        # 단위 뒤
+        (r'(mg|g|kg|ml|L|%|회)([가-힣])', r'\1 \2'),
+    ]
+
+    result = text
+    for pattern, replacement in patterns:
+        result = re.sub(pattern, replacement, result)
+
+    return result
+
+
+def format_items_list(items_text: str) -> str:
+    """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환"""
+    if not items_text:
+        return items_text
+
+    # 콤마로 분리
+    items = [item.strip() for item in items_text.split(',') if item.strip()]
+
+    # 각 항목에 띄어쓰기 추가 후 bullet point로 포맷팅
+    formatted_items = []
+    for item in items:
+        formatted_item = format_korean_spacing(item)
+        formatted_items.append(f"• {formatted_item}")
+
+    return '\n'.join(formatted_items)
+
+
 def is_image_url(text: str) -> bool:
     """텍스트가 이미지 URL인지 확인"""
     if not text:
@@ -638,8 +696,9 @@ def chatbot():
                     result = get_inspection_item(user_data["분야"], food_type)
                     if result:
                         user_data["실패횟수"] = 0
+                        formatted_items = format_items_list(result['items'])
                         response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
-                        response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                        response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                         response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                         return make_response(response_text, ["종료"])
                     else:
@@ -655,8 +714,10 @@ def chatbot():
                     result = get_inspection_cycle(user_data["분야"], user_data["업종"], food_type)
                     if result:
                         user_data["실패횟수"] = 0
+                        formatted_cycle = format_korean_spacing(result['cycle'])
+                        formatted_food_type = format_korean_spacing(result['food_type'])
                         response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
-                        response_text += f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                        response_text += f"✅ [{result['food_group']}] {formatted_food_type}의 검사주기:\n\n{formatted_cycle}"
                         response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                         return make_response(response_text, ["종료"])
                     else:
@@ -817,7 +878,8 @@ def chatbot():
                     # 1개 매칭 시 바로 결과 표시
                     result = all_matches[0]
                     user_data["실패횟수"] = 0
-                    response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                    formatted_items = format_items_list(result['items'])
+                    response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
@@ -865,7 +927,9 @@ def chatbot():
                     # 1개 매칭 시 바로 결과 표시
                     result = all_matches[0]
                     user_data["실패횟수"] = 0
-                    response_text = f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                    formatted_cycle = format_korean_spacing(result['cycle'])
+                    formatted_food_type = format_korean_spacing(result['food_type'])
+                    response_text = f"✅ [{result['food_group']}] {formatted_food_type}의 검사주기:\n\n{formatted_cycle}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
