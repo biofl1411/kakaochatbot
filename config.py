@@ -33,6 +33,24 @@ URL_MAPPING = {
         "검사종류": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_241",
         "9대영양성분": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_193",
         "14대영양성분": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_192"
+    },
+    "항생물질": {
+        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_241"
+    },
+    "잔류농약": {
+        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_90"
+    },
+    "방사능": {
+        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=HY5KJJJI&question_90"
+    },
+    "비건": {
+        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_185"
+    },
+    "할랄": {
+        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_186"
+    },
+    "동물DNA": {
+        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_127"
     }
 }
 
@@ -55,6 +73,28 @@ NUTRITION_POPUP_MAPPING = {
     "검사종류": "question_241",
     "9대영양성분": "question_193",
     "14대영양성분": "question_192"
+}
+
+# 일반 검사 팝업 ID 매핑 (카테고리 > 메뉴 > 팝업ID)
+GENERAL_POPUP_MAPPING = {
+    "항생물질": {
+        "검사종류": "question_241"
+    },
+    "잔류농약": {
+        "검사종류": "question_90"
+    },
+    "방사능": {
+        "검사안내": "question_90"
+    },
+    "비건": {
+        "검사안내": "question_185"
+    },
+    "할랄": {
+        "검사안내": "question_186"
+    },
+    "동물DNA": {
+        "검사안내": "question_127"
+    }
 }
 
 # 스케줄러 설정 (매일 크롤링 시간)

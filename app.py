@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
-from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT
+from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING
 from models import (
     init_database,
     get_inspection_item,
@@ -21,7 +21,8 @@ from models import (
     find_similar_cycles,
     get_last_crawl_time,
     can_use_vision_api,
-    get_vision_api_remaining
+    get_vision_api_remaining,
+    get_nutrition_info
 )
 from vision_ocr import extract_food_type_from_image, is_vision_api_available
 
@@ -65,6 +66,44 @@ def make_response(text: str, buttons: list = None):
         "version": "2.0",
         "template": {
             "outputs": [{"simpleText": {"text": text}}]
+        }
+    }
+
+    if buttons:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in buttons
+        ]
+
+    return jsonify(response)
+
+
+def make_response_with_link(text: str, link_label: str, link_url: str, buttons: list = None):
+    """카카오 챗봇 응답 형식 생성 (링크 버튼 포함)
+
+    Args:
+        text: 응답 텍스트
+        link_label: 링크 버튼 라벨 (예: "자세히 보기")
+        link_url: 링크 URL
+        buttons: 하단 퀵리플라이 버튼 리스트
+    """
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "basicCard": {
+                        "description": text,
+                        "buttons": [
+                            {
+                                "label": link_label,
+                                "action": "webLink",
+                                "webLinkUrl": link_url
+                            }
+                        ]
+                    }
+                }
+            ]
         }
     }
 
@@ -440,6 +479,10 @@ def chatbot():
             if user_input == "영양성분검사":
                 user_data["검사분야_메뉴"] = "영양성분검사"
 
+            # 일반 검사 메뉴 상태 저장 (항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA)
+            if user_input in ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]:
+                user_data["검사분야_메뉴"] = user_input
+
             return make_response(
                 f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
                 submenu["buttons"]
@@ -514,6 +557,45 @@ def chatbot():
 
 ※ 비타민, 무기질, 식이섬유(나법) 등 개별항목 접수도 가능합니다."""
             return make_response(response_text, ["영양성분검사", "검사분야", "처음으로"])
+
+        # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 DB 조회 및 자세히 보기 링크 =====
+        general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]
+        current_menu = user_data.get("검사분야_메뉴")
+
+        if current_menu in general_menus and user_input in ["검사종류", "검사안내"]:
+            # DB에서 크롤링된 데이터 조회
+            db_data = get_nutrition_info(current_menu, user_input)
+
+            # URL 가져오기
+            detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
+
+            if db_data and db_data.get("details"):
+                response_text = f"📋 {current_menu} - {user_input}\n\n{db_data['details']}"
+
+                if detail_url:
+                    return make_response_with_link(
+                        response_text,
+                        "🔗 자세히 보기",
+                        detail_url,
+                        [current_menu, "검사분야", "처음으로"]
+                    )
+                else:
+                    return make_response(response_text, [current_menu, "검사분야", "처음으로"])
+            else:
+                # DB에 데이터가 없으면 URL로 안내
+                if detail_url:
+                    response_text = f"📋 {current_menu} - {user_input}\n\n자세한 내용은 아래 링크를 확인해주세요."
+                    return make_response_with_link(
+                        response_text,
+                        "🔗 자세히 보기",
+                        detail_url,
+                        [current_menu, "검사분야", "처음으로"]
+                    )
+                else:
+                    return make_response(
+                        f"📋 {current_menu} - {user_input}\n\n정보를 준비 중입니다.",
+                        [current_menu, "검사분야", "처음으로"]
+                    )
 
         # ===== 검사분야 말단 메뉴 응답 =====
         if user_input in INSPECTION_MENU["responses"]:

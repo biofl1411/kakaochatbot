@@ -13,7 +13,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import traceback
 
-from config import URL_MAPPING, INDUSTRY_MAPPING, ITEM_POPUP_MAPPING, NUTRITION_POPUP_MAPPING, LOG_FILE, LOG_FORMAT
+from config import URL_MAPPING, INDUSTRY_MAPPING, ITEM_POPUP_MAPPING, NUTRITION_POPUP_MAPPING, GENERAL_POPUP_MAPPING, LOG_FILE, LOG_FORMAT
 from models import (
     save_inspection_item,
     save_inspection_cycle,
@@ -271,6 +271,79 @@ class Crawler:
                 result.append(row[0])
         return "\n".join(result)
 
+    def crawl_general_info(self) -> int:
+        """
+        일반 검사 정보 크롤링 (항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA)
+
+        Returns:
+            저장된 항목 수
+        """
+        total_count = 0
+        categories = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]
+
+        try:
+            driver = self._get_driver()
+            logger.info("일반 검사 정보 크롤링 시작")
+
+            for category in categories:
+                category_urls = URL_MAPPING.get(category, {})
+                category_popups = GENERAL_POPUP_MAPPING.get(category, {})
+
+                for menu_type, url in category_urls.items():
+                    target_id = category_popups.get(menu_type)
+                    if not target_id:
+                        logger.warning(f"{category} 팝업 ID를 찾을 수 없음: {menu_type}")
+                        continue
+
+                    logger.info(f"{category} 크롤링: {menu_type} (URL: {url})")
+
+                    driver.get(url)
+                    WebDriverWait(driver, 10).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "body"))
+                    )
+
+                    soup = BeautifulSoup(driver.page_source, "html.parser")
+
+                    # 팝업 요소에서 테이블 찾기
+                    target_element = soup.find("div", class_="needpopup answerPop", id=target_id)
+                    if not target_element:
+                        logger.warning(f"{category} 팝업 요소를 찾을 수 없음: {menu_type} (ID: {target_id})")
+                        continue
+
+                    table = target_element.find("table")
+                    if not table:
+                        # 테이블이 없으면 전체 텍스트 추출
+                        details = target_element.get_text(strip=True)
+                        if details:
+                            save_nutrition_info(category, menu_type, details)
+                            total_count += 1
+                            logger.info(f"{category} 저장 완료: {menu_type} (텍스트)")
+                        continue
+
+                    # 테이블 데이터 추출
+                    rows = table.find_all("tr")
+                    table_data = []
+
+                    for row in rows:
+                        cells = row.find_all(["th", "td"])
+                        if cells:
+                            row_data = [cell.get_text(strip=True) for cell in cells]
+                            table_data.append(row_data)
+
+                    if table_data:
+                        details = self._format_table_data(table_data)
+                        save_nutrition_info(category, menu_type, details)
+                        total_count += 1
+                        logger.info(f"{category} 저장 완료: {menu_type}")
+
+            logger.info(f"일반 검사 정보 크롤링 완료: {total_count}개 저장")
+            return total_count
+
+        except Exception as e:
+            logger.error(f"일반 검사 정보 크롤링 실패: {e}")
+            logger.error(traceback.format_exc())
+            return 0
+
     def crawl_all(self):
         """모든 데이터 크롤링"""
         logger.info("=" * 50)
@@ -291,6 +364,10 @@ class Crawler:
 
         # 영양성분검사 정보 크롤링
         count = self.crawl_nutrition_info()
+        total += count
+
+        # 일반 검사 정보 크롤링 (항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA)
+        count = self.crawl_general_info()
         total += count
 
         # WebDriver 종료
