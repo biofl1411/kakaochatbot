@@ -134,6 +134,52 @@ def format_items_list(items_text: str) -> str:
     return '\n'.join(formatted_items)
 
 
+def format_crawled_data(data_text: str) -> str:
+    """크롤링된 데이터를 가독성 있게 포맷팅
+
+    크롤러가 저장한 형식:
+    [헤더] 값1 | 값2 | 값3
+
+    변환 후:
+    📌 헤더
+    • 값1
+    • 값2
+    """
+    if not data_text:
+        return data_text
+
+    lines = data_text.split('\n')
+    result = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            # 헤더 추가
+            result.append(f"\n📌 {header}")
+
+            if values_part:
+                # | 로 구분된 값들을 bullet point로
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+                for value in values:
+                    formatted_value = format_korean_spacing(value)
+                    result.append(f"  • {formatted_value}")
+        else:
+            # 일반 텍스트는 그대로 (띄어쓰기 적용)
+            result.append(format_korean_spacing(line))
+
+    # 첫 줄의 불필요한 줄바꿈 제거
+    formatted = '\n'.join(result)
+    return formatted.strip()
+
+
 def is_image_url(text: str) -> bool:
     """텍스트가 이미지 URL인지 확인"""
     if not text:
@@ -620,7 +666,8 @@ def chatbot():
             detail_url = URL_MAPPING.get("영양성분검사", {}).get(user_input)
 
             if db_data and db_data.get("details"):
-                response_text = f"📋 {user_input}\n\n{db_data['details']}"
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📋 {user_input}\n\n{formatted_data}"
             else:
                 response_text = f"📋 {user_input}\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
 
@@ -642,7 +689,8 @@ def chatbot():
             db_data = get_nutrition_info("영양성분검사", "검사종류")
 
             if db_data and db_data.get("details"):
-                response_text = f"📊 영양표시 종류\n\n{db_data['details']}"
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📊 영양표시 종류\n\n{formatted_data}"
             else:
                 response_text = "📊 영양표시 종류\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
 
@@ -665,7 +713,8 @@ def chatbot():
             db_data = get_nutrition_info("영양성분검사", url_key)
 
             if db_data and db_data.get("details"):
-                response_text = f"📊 {user_input}\n\n{db_data['details']}"
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📊 {user_input}\n\n{formatted_data}"
             else:
                 response_text = f"📊 {user_input}\n\n자세한 내용은 아래 링크를 확인해주세요."
 
@@ -691,7 +740,8 @@ def chatbot():
             detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
 
             if db_data and db_data.get("details"):
-                response_text = f"📋 {current_menu} - {user_input}\n\n{db_data['details']}"
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📋 {current_menu} - {user_input}\n\n{formatted_data}"
             else:
                 response_text = f"📋 {current_menu} - {user_input}\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
 
