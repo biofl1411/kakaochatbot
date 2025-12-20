@@ -3,6 +3,7 @@
 - 회사 홈페이지에서 검사항목/검사주기 정보 크롤링
 - 주기적으로 실행되어 DB에 저장
 """
+import re
 import requests
 from bs4 import BeautifulSoup
 import logging
@@ -264,12 +265,61 @@ class Crawler:
         """테이블 데이터를 포맷팅된 텍스트로 변환"""
         result = []
         for row in table_data:
+            # 제목 행 제외 (Q로 시작하는 질문 번호)
+            if row and re.match(r'^Q\d+\.', row[0]):
+                continue
+
             if len(row) >= 2:
                 # 첫 번째 열이 헤더인 경우
-                result.append(f"[{row[0]}] {' | '.join(row[1:])}")
+                # "자세히 보기" 텍스트 제거
+                cleaned_values = []
+                for val in row[1:]:
+                    cleaned = self._clean_text(val)
+                    if cleaned:
+                        cleaned_values.append(cleaned)
+                if cleaned_values:
+                    result.append(f"[{row[0]}] {' | '.join(cleaned_values)}")
             elif len(row) == 1:
-                result.append(row[0])
+                cleaned = self._clean_text(row[0])
+                if cleaned and not re.match(r'^Q\d+\.', cleaned):
+                    result.append(cleaned)
         return "\n".join(result)
+
+    def _clean_text(self, text: str) -> str:
+        """텍스트에서 불필요한 요소 제거"""
+        if not text:
+            return ""
+
+        # "자세히 보기" 및 관련 텍스트 제거
+        text = re.sub(r'자세히\s*보기', '', text)
+        # 앞뒤 하이픈, 공백 정리
+        text = re.sub(r'^[-\s]+|[-\s]+$', '', text)
+        # 중복 공백 제거
+        text = re.sub(r'\s+', ' ', text)
+
+        return text.strip()
+
+    def _extract_items_from_text(self, text: str) -> str:
+        """텍스트에서 항목들을 추출하여 포맷팅"""
+        if not text:
+            return ""
+
+        # 제목 제거 (Q로 시작하는 줄)
+        text = re.sub(r'Q\d+\.[^-]*', '', text)
+
+        # "자세히 보기" 제거
+        text = re.sub(r'자세히\s*보기', '', text)
+
+        # 하이픈으로 항목 분리
+        items = re.split(r'[-•*]\s*', text)
+
+        result = []
+        for item in items:
+            item = item.strip()
+            if item and len(item) > 1:  # 빈 항목 제외
+                result.append(f"[항목] {item}")
+
+        return "\n".join(result) if result else text
 
     def crawl_general_info(self) -> int:
         """
@@ -312,12 +362,14 @@ class Crawler:
 
                     table = target_element.find("table")
                     if not table:
-                        # 테이블이 없으면 전체 텍스트 추출
-                        details = target_element.get_text(strip=True)
-                        if details:
-                            save_nutrition_info(category, menu_type, details)
-                            total_count += 1
-                            logger.info(f"{category} 저장 완료: {menu_type} (텍스트)")
+                        # 테이블이 없으면 전체 텍스트 추출 후 정제
+                        raw_text = target_element.get_text(strip=True)
+                        if raw_text:
+                            details = self._extract_items_from_text(raw_text)
+                            if details:
+                                save_nutrition_info(category, menu_type, details)
+                                total_count += 1
+                                logger.info(f"{category} 저장 완료: {menu_type} (텍스트)")
                         continue
 
                     # 테이블 데이터 추출
