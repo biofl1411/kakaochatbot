@@ -69,6 +69,18 @@ def init_database():
         )
     """)
 
+    # 영양성분검사 정보 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nutrition_info (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT NOT NULL,
+            test_type TEXT NOT NULL,
+            details TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(category, test_type)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -425,6 +437,57 @@ def find_similar_cycles(category: str, industry: str, keyword: str, min_score: i
     # 점수순 정렬
     similar.sort(key=lambda x: x[1], reverse=True)
     return [item[0] for item in similar[:5]]
+
+
+# ===== 영양성분검사 관련 함수 =====
+
+def save_nutrition_info(category: str, test_type: str, details: str):
+    """영양성분검사 정보 저장 (기존 데이터 업데이트 또는 새로 추가)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO nutrition_info (category, test_type, details, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(category, test_type)
+        DO UPDATE SET details = ?, updated_at = ?
+    """, (category, test_type, details, datetime.now(), details, datetime.now()))
+
+    conn.commit()
+    conn.close()
+
+
+def get_nutrition_info(category: str, test_type: str) -> dict:
+    """영양성분검사 정보 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM nutrition_info
+        WHERE category = ? AND test_type = ?
+    """, (category, test_type))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def get_all_nutrition_info(category: str) -> list:
+    """특정 카테고리의 모든 영양성분검사 정보 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM nutrition_info
+        WHERE category = ?
+        ORDER BY test_type
+    """, (category,))
+
+    results = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in results]
 
 
 # ===== 크롤링 로그 =====
