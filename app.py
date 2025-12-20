@@ -134,6 +134,71 @@ def format_items_list(items_text: str) -> str:
     return '\n'.join(formatted_items)
 
 
+def parse_data_with_links(data_text: str) -> list:
+    """크롤링된 데이터에서 텍스트와 URL을 추출
+
+    크롤러가 저장한 형식:
+    [헤더] 값1{{URL:http://...}} | 값2{{URL:http://...}}
+
+    Returns:
+        list of dict: [{"header": str, "items": [{"text": str, "url": str or None}]}]
+    """
+    if not data_text:
+        return []
+
+    url_pattern = re.compile(r'\{\{URL:(.*?)\}\}')
+    lines = data_text.split('\n')
+    result = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            section = {"header": header, "items": []}
+
+            if values_part:
+                # | 로 구분된 값들
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+                for value in values:
+                    # URL 추출
+                    url_match = url_pattern.search(value)
+                    if url_match:
+                        url = url_match.group(1)
+                        text = url_pattern.sub('', value).strip()
+                        # "자세히 보기" 텍스트 제거
+                        text = re.sub(r'자세히\s*보기', '', text).strip()
+                        section["items"].append({"text": text, "url": url})
+                    else:
+                        text = format_korean_spacing(value)
+                        section["items"].append({"text": text, "url": None})
+
+            result.append(section)
+        else:
+            # 일반 텍스트
+            url_match = url_pattern.search(line)
+            if url_match:
+                url = url_match.group(1)
+                text = url_pattern.sub('', line).strip()
+                text = re.sub(r'자세히\s*보기', '', text).strip()
+                result.append({"header": None, "items": [{"text": text, "url": url}]})
+            else:
+                result.append({"header": None, "items": [{"text": format_korean_spacing(line), "url": None}]})
+
+    return result
+
+
+def has_links_in_data(data_text: str) -> bool:
+    """데이터에 URL이 포함되어 있는지 확인"""
+    return '{{URL:' in data_text if data_text else False
+
+
 def format_crawled_data(data_text: str) -> str:
     """크롤링된 데이터를 가독성 있게 포맷팅
 
@@ -147,6 +212,9 @@ def format_crawled_data(data_text: str) -> str:
     """
     if not data_text:
         return data_text
+
+    # URL 패턴 제거 (텍스트만 표시할 때)
+    url_pattern = re.compile(r'\{\{URL:.*?\}\}')
 
     lines = data_text.split('\n')
     result = []
@@ -169,11 +237,19 @@ def format_crawled_data(data_text: str) -> str:
                 # | 로 구분된 값들을 bullet point로
                 values = [v.strip() for v in values_part.split('|') if v.strip()]
                 for value in values:
-                    formatted_value = format_korean_spacing(value)
-                    result.append(f"  • {formatted_value}")
+                    # URL 패턴 제거
+                    clean_value = url_pattern.sub('', value).strip()
+                    # "자세히 보기" 텍스트 제거
+                    clean_value = re.sub(r'자세히\s*보기', '', clean_value).strip()
+                    if clean_value:
+                        formatted_value = format_korean_spacing(clean_value)
+                        result.append(f"  • {formatted_value}")
         else:
             # 일반 텍스트는 그대로 (띄어쓰기 적용)
-            result.append(format_korean_spacing(line))
+            clean_line = url_pattern.sub('', line).strip()
+            clean_line = re.sub(r'자세히\s*보기', '', clean_line).strip()
+            if clean_line:
+                result.append(format_korean_spacing(clean_line))
 
     # 첫 줄의 불필요한 줄바꿈 제거
     formatted = '\n'.join(result)
@@ -285,6 +361,108 @@ def make_carousel_response(cards: list, quick_replies: list = None):
                     "carousel": {
                         "type": "basicCard",
                         "items": items
+                    }
+                }
+            ]
+        }
+    }
+
+    if quick_replies:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in quick_replies
+        ]
+
+    return jsonify(response)
+
+
+def make_list_card_response(header: str, items: list, quick_replies: list = None):
+    """카카오 챗봇 ListCard 응답 형식 생성 (링크 버튼 포함)
+
+    Args:
+        header: 리스트 카드 헤더 텍스트
+        items: 아이템 리스트. [{"text": str, "url": str or None}, ...]
+        quick_replies: 하단 퀵리플라이 버튼 리스트
+    """
+    list_items = []
+    for item in items[:5]:  # 최대 5개까지만 표시
+        list_item = {
+            "title": item["text"]
+        }
+        if item.get("url"):
+            list_item["link"] = {"web": item["url"]}
+        list_items.append(list_item)
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "listCard": {
+                        "header": {"title": header},
+                        "items": list_items
+                    }
+                }
+            ]
+        }
+    }
+
+    if quick_replies:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in quick_replies
+        ]
+
+    return jsonify(response)
+
+
+def make_carousel_with_links_response(title: str, data_sections: list, quick_replies: list = None):
+    """URL이 포함된 데이터를 카드 캐러셀로 표시
+
+    Args:
+        title: 전체 제목
+        data_sections: parse_data_with_links()의 결과
+        quick_replies: 하단 퀵리플라이 버튼 리스트
+    """
+    cards = []
+
+    for section in data_sections:
+        if not section.get("items"):
+            continue
+
+        header = section.get("header", "")
+
+        # 각 아이템을 개별 카드로 (링크가 있는 경우)
+        for item in section["items"]:
+            if item.get("url"):
+                card = {
+                    "title": item["text"][:40] if len(item["text"]) > 40 else item["text"],
+                    "description": header if header else "",
+                    "buttons": [
+                        {
+                            "label": "🔗 자세히 보기",
+                            "action": "webLink",
+                            "webLinkUrl": item["url"]
+                        }
+                    ]
+                }
+                cards.append(card)
+
+    if not cards:
+        # 링크 없는 경우 일반 텍스트 반환
+        return None
+
+    # 최대 10개 카드
+    cards = cards[:10]
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "carousel": {
+                        "type": "basicCard",
+                        "items": cards
                     }
                 }
             ]
@@ -666,6 +844,17 @@ def chatbot():
             detail_url = URL_MAPPING.get("영양성분검사", {}).get(user_input)
 
             if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        user_input,
+                        data_sections,
+                        ["영양성분검사", "검사분야", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
                 formatted_data = format_crawled_data(db_data['details'])
                 response_text = f"📋 {user_input}\n\n{formatted_data}"
             else:
@@ -689,6 +878,17 @@ def chatbot():
             db_data = get_nutrition_info("영양성분검사", "검사종류")
 
             if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        "영양표시 종류",
+                        data_sections,
+                        ["검사종류", "영양성분검사", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
                 formatted_data = format_crawled_data(db_data['details'])
                 response_text = f"📊 영양표시 종류\n\n{formatted_data}"
             else:
@@ -713,6 +913,17 @@ def chatbot():
             db_data = get_nutrition_info("영양성분검사", url_key)
 
             if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        user_input,
+                        data_sections,
+                        ["검사종류", "영양성분검사", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
                 formatted_data = format_crawled_data(db_data['details'])
                 response_text = f"📊 {user_input}\n\n{formatted_data}"
             else:
@@ -740,6 +951,19 @@ def chatbot():
             detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
 
             if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    # 링크가 있으면 캐러셀로 표시
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        f"{current_menu} - {user_input}",
+                        data_sections,
+                        [current_menu, "검사분야", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
+                # 링크가 없거나 캐러셀 생성 실패 시 일반 텍스트로 표시
                 formatted_data = format_crawled_data(db_data['details'])
                 response_text = f"📋 {current_menu} - {user_input}\n\n{formatted_data}"
             else:

@@ -236,14 +236,14 @@ class Crawler:
                     logger.warning(f"영양성분검사 테이블을 찾을 수 없음: {test_type}")
                     continue
 
-                # 테이블 데이터 추출
+                # 테이블 데이터 추출 (링크 포함)
                 rows = table.find_all("tr")
                 table_data = []
 
                 for row in rows:
                     cells = row.find_all(["th", "td"])
                     if cells:
-                        row_data = [cell.get_text(strip=True) for cell in cells]
+                        row_data = self._extract_cell_data_with_links(cells)
                         table_data.append(row_data)
 
                 if table_data:
@@ -261,28 +261,82 @@ class Crawler:
             logger.error(traceback.format_exc())
             return 0
 
+    def _extract_cell_data_with_links(self, cells) -> list:
+        """셀에서 텍스트와 링크를 함께 추출
+
+        Returns:
+            list of (text, url) tuples or just text strings
+        """
+        row_data = []
+        base_url = "https://www.biofl.co.kr"
+
+        for cell in cells:
+            # 셀 내의 모든 링크 찾기
+            links = cell.find_all("a", href=True)
+
+            # "자세히 보기" 링크가 있는 경우
+            detail_links = [link for link in links if "자세히" in link.get_text()]
+
+            if detail_links:
+                # 링크 텍스트를 제외한 셀 텍스트 추출
+                cell_text = cell.get_text(strip=True)
+                # 첫 번째 "자세히 보기" 링크의 URL
+                href = detail_links[0].get("href", "")
+
+                # 상대 경로를 절대 경로로 변환
+                if href and not href.startswith("http"):
+                    if href.startswith("/"):
+                        href = base_url + href
+                    else:
+                        href = base_url + "/" + href
+
+                row_data.append((cell_text, href))
+            else:
+                # 링크가 없는 일반 텍스트
+                row_data.append(cell.get_text(strip=True))
+
+        return row_data
+
     def _format_table_data(self, table_data: list) -> str:
         """테이블 데이터를 포맷팅된 텍스트로 변환"""
         result = []
         for row in table_data:
             # 제목 행 제외 (Q로 시작하는 질문 번호)
-            if row and re.match(r'^Q\d+\.', row[0]):
+            if row and re.match(r'^Q\d+\.', str(row[0])):
                 continue
 
             if len(row) >= 2:
                 # 첫 번째 열이 헤더인 경우
-                # "자세히 보기" 텍스트 제거
                 cleaned_values = []
                 for val in row[1:]:
-                    cleaned = self._clean_text(val)
-                    if cleaned:
-                        cleaned_values.append(cleaned)
+                    # val이 (text, url) 튜플인 경우
+                    if isinstance(val, tuple):
+                        text, url = val
+                        cleaned = self._clean_text(text)
+                        if cleaned and url:
+                            cleaned_values.append(f"{cleaned}{{{{URL:{url}}}}}")
+                        elif cleaned:
+                            cleaned_values.append(cleaned)
+                    else:
+                        cleaned = self._clean_text(val)
+                        if cleaned:
+                            cleaned_values.append(cleaned)
                 if cleaned_values:
                     result.append(f"[{row[0]}] {' | '.join(cleaned_values)}")
             elif len(row) == 1:
-                cleaned = self._clean_text(row[0])
-                if cleaned and not re.match(r'^Q\d+\.', cleaned):
-                    result.append(cleaned)
+                val = row[0]
+                if isinstance(val, tuple):
+                    text, url = val
+                    cleaned = self._clean_text(text)
+                    if cleaned and not re.match(r'^Q\d+\.', cleaned):
+                        if url:
+                            result.append(f"{cleaned}{{{{URL:{url}}}}}")
+                        else:
+                            result.append(cleaned)
+                else:
+                    cleaned = self._clean_text(val)
+                    if cleaned and not re.match(r'^Q\d+\.', cleaned):
+                        result.append(cleaned)
         return "\n".join(result)
 
     def _clean_text(self, text: str) -> str:
@@ -372,14 +426,14 @@ class Crawler:
                                 logger.info(f"{category} 저장 완료: {menu_type} (텍스트)")
                         continue
 
-                    # 테이블 데이터 추출
+                    # 테이블 데이터 추출 (링크 포함)
                     rows = table.find_all("tr")
                     table_data = []
 
                     for row in rows:
                         cells = row.find_all(["th", "td"])
                         if cells:
-                            row_data = [cell.get_text(strip=True) for cell in cells]
+                            row_data = self._extract_cell_data_with_links(cells)
                             table_data.append(row_data)
 
                     if table_data:
