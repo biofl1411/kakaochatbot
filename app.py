@@ -245,6 +245,10 @@ INSPECTION_MENU = {
             "title": "잔류농약",
             "buttons": ["검사종류", "처음으로"]
         },
+        "방사능": {
+            "title": "방사능 검사",
+            "buttons": ["검사안내", "처음으로"]
+        },
         "비건": {
             "title": "비건 검사",
             "buttons": ["검사안내", "사용키트", "처음으로"]
@@ -563,44 +567,110 @@ def chatbot():
             else:
                 return make_response(response_text, ["검사종류", "영양성분검사", "처음으로"])
 
-        # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 DB 조회 및 자세히 보기 링크 =====
-        general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]
+        # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 하드코딩된 응답 =====
         current_menu = user_data.get("검사분야_메뉴")
 
-        if current_menu in general_menus and user_input in ["검사종류", "검사안내"]:
-            # DB에서 크롤링된 데이터 조회
-            db_data = get_nutrition_info(current_menu, user_input)
+        # 항생물질 > 검사종류
+        if current_menu == "항생물질" and user_input == "검사종류":
+            response_text = """🧪 항생물질 검사항목
 
-            # URL 가져오기
-            detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
+- 항생물질 28종
+- 항생물질 60종
+- 항생물질 99종
+- 항생물질 156종
 
-            if db_data and db_data.get("details"):
-                response_text = f"📋 {current_menu} - {user_input}\n\n{db_data['details']}"
+* 말라카이트 그린 및 그 대사물질(구충제)
+* 니트로퓨란계 대사물질
 
-                if detail_url:
-                    return make_response_with_link(
-                        response_text,
-                        "🔗 자세히 보기",
-                        detail_url,
-                        [current_menu, "검사분야", "처음으로"]
-                    )
-                else:
-                    return make_response(response_text, [current_menu, "검사분야", "처음으로"])
-            else:
-                # DB에 데이터가 없으면 URL로 안내
-                if detail_url:
-                    response_text = f"📋 {current_menu} - {user_input}\n\n자세한 내용은 아래 링크를 확인해주세요."
-                    return make_response_with_link(
-                        response_text,
-                        "🔗 자세히 보기",
-                        detail_url,
-                        [current_menu, "검사분야", "처음으로"]
-                    )
-                else:
-                    return make_response(
-                        f"📋 {current_menu} - {user_input}\n\n정보를 준비 중입니다.",
-                        [current_menu, "검사분야", "처음으로"]
-                    )
+세부 항목을 선택해주세요."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_241",
+                ["항생물질 28종", "항생물질 60종", "항생물질 99종", "항생물질 156종", "항생물질", "처음으로"]
+            )
+
+        # 잔류농약 > 검사종류
+        if current_menu == "잔류농약" and user_input == "검사종류":
+            response_text = """🌿 잔류농약 검사항목
+
+- 다종농약 검사
+- 개별농약 검사
+- 수출용 농약 검사
+
+세부 항목을 선택해주세요."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_90",
+                ["잔류농약", "검사분야", "처음으로"]
+            )
+
+        # 방사능 > 검사안내
+        if current_menu == "방사능" and user_input == "검사안내":
+            response_text = """☢️ 방사능 검사안내
+
+- 세슘(Cs-134, Cs-137)
+- 요오드(I-131)
+
+수입식품 및 국내식품 방사능 검사를 진행합니다."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=HY5KJJJI&question_90",
+                ["방사능", "검사분야", "처음으로"]
+            )
+
+        # 비건 > 검사안내
+        if current_menu == "비건" and user_input == "검사안내":
+            response_text = """🌱 비건 검사안내
+
+동물성 원료 사용 여부를 확인하는 검사입니다.
+
+- 동물 DNA 검출 검사
+- 동물성 성분 분석
+
+비건 인증을 위한 검사를 진행합니다."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_185",
+                ["비건", "검사분야", "처음으로"]
+            )
+
+        # 할랄 > 검사안내
+        if current_menu == "할랄" and user_input == "검사안내":
+            response_text = """🕌 할랄 검사안내
+
+돼지 유래 성분 검출 검사입니다.
+
+- 돼지 DNA 검출 검사
+- 돼지 유래 단백질 검사
+
+할랄 인증을 위한 검사를 진행합니다."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_186",
+                ["할랄", "검사분야", "처음으로"]
+            )
+
+        # 동물DNA > 검사안내
+        if current_menu == "동물DNA" and user_input == "검사안내":
+            response_text = """🧬 동물DNA 검사안내
+
+식품 내 동물 종 판별 검사입니다.
+
+- 소, 돼지, 닭, 오리 등 축종 판별
+- 혼입 여부 확인
+
+원료 진위 확인 및 표시 적합성 검사를 진행합니다."""
+            return make_response_with_link(
+                response_text,
+                "🔗 자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_127",
+                ["동물DNA", "검사분야", "처음으로"]
+            )
 
         # ===== 검사분야 말단 메뉴 응답 =====
         if user_input in INSPECTION_MENU["responses"]:
