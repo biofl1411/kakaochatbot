@@ -78,7 +78,7 @@ NUTRITION_POPUP_MAPPING = {
 # 일반 검사 팝업 ID 매핑 (카테고리 > 메뉴 > 팝업ID)
 GENERAL_POPUP_MAPPING = {
     "항생물질": {
-        "검사종류": "question_241"
+        "검사종류": "question_90"
     },
     "잔류농약": {
         "검사종류": "question_90"
