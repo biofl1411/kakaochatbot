@@ -940,10 +940,25 @@ def chatbot():
                 return make_response(response_text, ["검사종류", "영양성분검사", "처음으로"])
 
         # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 DB 조회 =====
-        general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]
+        general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA", "알레르기", "글루텐Free", "소비기한설정", "자가품질검사"]
         current_menu = user_data.get("검사분야_메뉴")
 
-        if current_menu in general_menus and user_input in ["검사종류", "검사안내"]:
+        # 메뉴별 처리 가능한 하위 항목
+        menu_items_map = {
+            "항생물질": ["검사종류"],
+            "잔류농약": ["검사종류"],
+            "방사능": ["검사안내"],
+            "비건": ["검사안내"],
+            "할랄": ["검사안내"],
+            "동물DNA": ["검사안내"],
+            "알레르기": ["검사종류", "RT-PCR", "Elisa"],
+            "글루텐Free": ["Free기준"],
+            "소비기한설정": ["가속실험", "실측실험"],
+            "자가품질검사": ["검사주기알림"]
+        }
+
+        allowed_items = menu_items_map.get(current_menu, [])
+        if current_menu in general_menus and user_input in allowed_items:
             # DB에서 크롤링된 데이터 조회
             db_data = get_nutrition_info(current_menu, user_input)
 

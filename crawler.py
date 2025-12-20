@@ -14,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import traceback
 
-from config import URL_MAPPING, INDUSTRY_MAPPING, ITEM_POPUP_MAPPING, NUTRITION_POPUP_MAPPING, GENERAL_POPUP_MAPPING, LOG_FILE, LOG_FORMAT
+from config import URL_MAPPING, INDUSTRY_MAPPING, ITEM_POPUP_MAPPING, NUTRITION_POPUP_MAPPING, GENERAL_POPUP_MAPPING, SECTION_FILTER, LOG_FILE, LOG_FORMAT
 from models import (
     save_inspection_item,
     save_inspection_cycle,
@@ -297,15 +297,38 @@ class Crawler:
 
         return row_data
 
-    def _format_table_data(self, table_data: list) -> str:
-        """테이블 데이터를 포맷팅된 텍스트로 변환"""
+    def _format_table_data(self, table_data: list, section_filter: str = None) -> str:
+        """테이블 데이터를 포맷팅된 텍스트로 변환
+
+        Args:
+            table_data: 테이블 데이터 리스트
+            section_filter: 특정 섹션만 포함할 경우 해당 섹션 헤더 텍스트
+        """
         result = []
+        in_target_section = section_filter is None  # 필터 없으면 항상 True
+        current_section_header = None
+
         for row in table_data:
             # 제목 행 제외 (Q로 시작하는 질문 번호)
             if row and re.match(r'^Q\d+\.', str(row[0])):
                 continue
 
             if len(row) >= 2:
+                header_text = str(row[0]) if not isinstance(row[0], tuple) else row[0][0]
+
+                # 섹션 필터가 있는 경우, 섹션 헤더 체크
+                if section_filter:
+                    if section_filter in header_text:
+                        in_target_section = True
+                        current_section_header = header_text
+                    elif current_section_header and not header_text.startswith(" "):
+                        # 새로운 섹션 시작 (타겟 섹션이 아닌 경우)
+                        if section_filter not in header_text:
+                            in_target_section = False
+
+                if not in_target_section:
+                    continue
+
                 # 첫 번째 열이 헤더인 경우
                 cleaned_values = []
                 for val in row[1:]:
@@ -322,7 +345,7 @@ class Crawler:
                         if cleaned:
                             cleaned_values.append(cleaned)
                 if cleaned_values:
-                    result.append(f"[{row[0]}] {' | '.join(cleaned_values)}")
+                    result.append(f"[{header_text}] {' | '.join(cleaned_values)}")
             elif len(row) == 1:
                 val = row[0]
                 if isinstance(val, tuple):
@@ -377,13 +400,18 @@ class Crawler:
 
     def crawl_general_info(self) -> int:
         """
-        일반 검사 정보 크롤링 (항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA)
+        일반 검사 정보 크롤링 (자가품질검사, 소비기한설정, 항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA, 알레르기, 글루텐Free)
 
         Returns:
             저장된 항목 수
         """
         total_count = 0
-        categories = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA"]
+        categories = [
+            "자가품질검사", "소비기한설정",
+            "항생물질", "잔류농약", "방사능",
+            "비건", "할랄", "동물DNA",
+            "알레르기", "글루텐Free"
+        ]
 
         try:
             driver = self._get_driver()
@@ -392,6 +420,7 @@ class Crawler:
             for category in categories:
                 category_urls = URL_MAPPING.get(category, {})
                 category_popups = GENERAL_POPUP_MAPPING.get(category, {})
+                category_filters = SECTION_FILTER.get(category, {})
 
                 for menu_type, url in category_urls.items():
                     target_id = category_popups.get(menu_type)
@@ -399,7 +428,10 @@ class Crawler:
                         logger.warning(f"{category} 팝업 ID를 찾을 수 없음: {menu_type}")
                         continue
 
-                    logger.info(f"{category} 크롤링: {menu_type} (URL: {url})")
+                    # 섹션 필터 가져오기
+                    section_filter = category_filters.get(menu_type)
+
+                    logger.info(f"{category} 크롤링: {menu_type} (URL: {url})" + (f" [필터: {section_filter}]" if section_filter else ""))
 
                     driver.get(url)
                     WebDriverWait(driver, 10).until(
@@ -437,10 +469,12 @@ class Crawler:
                             table_data.append(row_data)
 
                     if table_data:
-                        details = self._format_table_data(table_data)
-                        save_nutrition_info(category, menu_type, details)
-                        total_count += 1
-                        logger.info(f"{category} 저장 완료: {menu_type}")
+                        # 섹션 필터 적용하여 포맷팅
+                        details = self._format_table_data(table_data, section_filter)
+                        if details:  # 필터 적용 후 내용이 있는 경우만 저장
+                            save_nutrition_info(category, menu_type, details)
+                            total_count += 1
+                            logger.info(f"{category} 저장 완료: {menu_type}")
 
             logger.info(f"일반 검사 정보 크롤링 완료: {total_count}개 저장")
             return total_count
