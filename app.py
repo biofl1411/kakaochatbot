@@ -24,7 +24,16 @@ from models import (
     get_vision_api_remaining,
     get_nutrition_info
 )
-from vision_ocr import extract_food_type_from_image, is_vision_api_available
+try:
+    from vision_ocr import extract_food_type_from_image, is_vision_api_available
+    VISION_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Vision OCR 모듈 로드 실패: {e}")
+    VISION_AVAILABLE = False
+    def extract_food_type_from_image(url):
+        return {'success': False, 'food_type': None, 'message': 'Vision API 사용 불가'}
+    def is_vision_api_available():
+        return False
 
 # 로깅 설정
 logging.basicConfig(
@@ -702,12 +711,6 @@ INSPECTION_MENU = {
     "responses": {
         "검사주기알림": {
             "text": "🔔 검사주기알림 서비스\n\n자가품질검사 주기에 맞춰 알림을 받으실 수 있습니다.\n\n📞 문의: 02-XXX-XXXX\n🔗 홈페이지: www.biofl.co.kr"
-        },
-        "가속실험": {
-            "text": "⏱️ 가속실험 안내\n\n식품의 소비기한을 과학적으로 설정하기 위한 가속노화 실험입니다.\n\n• 실험기간: 약 2~4주\n• 온도조건: 상온/냉장/냉동 제품별 상이\n\n📞 문의: 02-XXX-XXXX"
-        },
-        "실측실험": {
-            "text": "📊 실측실험 안내\n\n실제 유통환경과 동일한 조건에서 진행하는 실험입니다.\n\n• 실험기간: 설정하고자 하는 소비기한 + α\n• 정확도가 높음\n\n📞 문의: 02-XXX-XXXX"
         },
         "검사수수료": {
             "text": "💰 검사수수료 안내\n\n검사 항목 및 수량에 따라 수수료가 상이합니다.\n\n🔗 홈페이지에서 견적서를 확인하세요.\n📞 문의: 02-XXX-XXXX"

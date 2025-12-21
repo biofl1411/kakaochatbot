@@ -6,7 +6,18 @@ import logging
 import re
 import requests
 from urllib.parse import unquote, urlparse
-from google.cloud import vision
+
+# Google Vision API import (optional)
+VISION_IMPORT_SUCCESS = False
+vision = None
+try:
+    from google.cloud import vision
+    VISION_IMPORT_SUCCESS = True
+except BaseException as e:
+    logging.warning(f"Google Vision API 모듈 로드 실패: {e}")
+    vision = None
+    VISION_IMPORT_SUCCESS = False
+
 from models import can_use_vision_api, increment_api_usage
 
 logger = logging.getLogger(__name__)
@@ -14,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 def is_vision_api_available() -> bool:
     """Vision API 사용 가능 여부 확인"""
+    if not VISION_IMPORT_SUCCESS:
+        return False
     return can_use_vision_api()
 
 
@@ -69,6 +82,14 @@ def extract_food_type_from_image(image_url: str) -> dict:
             'message': str
         }
     """
+    # Vision API 모듈 로드 확인
+    if not VISION_IMPORT_SUCCESS:
+        return {
+            'success': False,
+            'food_type': None,
+            'message': 'Vision API 모듈이 설치되지 않았습니다.'
+        }
+
     # Vision API 사용 가능 여부 확인
     if not can_use_vision_api():
         return {

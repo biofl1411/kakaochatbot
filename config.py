@@ -38,8 +38,8 @@ URL_MAPPING = {
         "14대영양성분": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_192"
     },
     "소비기한설정": {
-        "가속실험": "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_241",
-        "실측실험": "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_241"
+        "가속실험": "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_97",
+        "실측실험": "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_97"
     },
     "항생물질": {
         "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_90"
