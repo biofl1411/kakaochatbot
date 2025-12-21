@@ -1231,7 +1231,7 @@ def chatbot():
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 식품 유형을 1회 잘못 입력하셨습니다. 품목제조보고서의 식품의 유형을 확인하여 다시 한번 입력하거나, [종료]를 눌러주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
@@ -1287,7 +1287,7 @@ def chatbot():
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 식품 유형을 1회 잘못 입력하셨습니다. 품목제조보고서의 식품의 유형을 확인하여 다시 한번 입력하거나, [종료]를 눌러주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
