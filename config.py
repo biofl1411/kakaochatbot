@@ -103,10 +103,10 @@ GENERAL_POPUP_MAPPING = {
         "검사종류": "question_90"
     },
     "잔류농약": {
-        "검사종류": "question_90"
+        "검사종류": "question_85"
     },
     "방사능": {
-        "검사안내": "question_90"
+        "검사안내": "question_39"
     },
     "비건": {
         "검사안내": "question_185"
