@@ -96,8 +96,8 @@ GENERAL_POPUP_MAPPING = {
         "검사주기알림": "question_198"
     },
     "소비기한설정": {
-        "가속실험": "question_241",
-        "실측실험": "question_241"
+        "가속실험": "question_97",
+        "실측실험": "question_97"
     },
     "항생물질": {
         "검사종류": "question_90"
