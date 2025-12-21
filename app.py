@@ -1150,6 +1150,18 @@ def chatbot():
             else:
                 return make_response(response_text, [current_menu, "검사분야", "처음으로"])
 
+        # ===== 자가품질검사 > 검사주기알림 =====
+        if user_input == "검사주기알림" and user_data.get("검사분야_메뉴") == "자가품질검사":
+            response_text = "🔔 검사주기알림 서비스\n\n"
+            response_text += "자가품질검사 주기에 맞춰 알림을 받으실 수 있습니다.\n\n"
+            response_text += "자세한 내용은 아래 버튼을 클릭해주세요."
+            return make_response_with_link(
+                response_text,
+                "자세히 보기",
+                "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198",
+                ["자가품질검사", "검사분야", "처음으로"]
+            )
+
         # ===== 검사분야 말단 메뉴 응답 =====
         if user_input in INSPECTION_MENU["responses"]:
             response_data = INSPECTION_MENU["responses"][user_input]
