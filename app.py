@@ -204,11 +204,15 @@ def format_crawled_data(data_text: str) -> str:
 
     크롤러가 저장한 형식:
     [헤더] 값1 | 값2 | 값3
+    또는
+    [헤더]
+      • 항목1
+      • 항목2
 
     변환 후:
     📌 헤더
-    • 값1
-    • 값2
+      • 값1
+      • 값2
     """
     if not data_text:
         return data_text
@@ -220,8 +224,21 @@ def format_crawled_data(data_text: str) -> str:
     result = []
 
     for line in lines:
+        original_line = line
         line = line.strip()
         if not line:
+            continue
+
+        # 이미 bullet point로 시작하는 라인 (크롤러에서 이미 포맷된 경우)
+        if line.startswith('•') or original_line.startswith('  •'):
+            clean_line = url_pattern.sub('', line).strip()
+            clean_line = re.sub(r'자세히\s*보기', '', clean_line).strip()
+            if clean_line:
+                # • 로 시작하면 그대로 유지
+                if clean_line.startswith('•'):
+                    result.append(f"  {clean_line}")
+                else:
+                    result.append(f"  • {clean_line}")
             continue
 
         # [헤더] 값1 | 값2 형식 처리

@@ -381,20 +381,53 @@ class Crawler:
         if not text:
             return ""
 
-        # 제목 제거 (Q로 시작하는 줄)
-        text = re.sub(r'Q\d+\.[^-]*', '', text)
+        # 제목 제거 (Q로 시작하는 질문 제목 전체)
+        # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
+        text = re.sub(r'Q\d+\.[^Q]*?(?=DN|검사|Kit|필요한|해당|개별|\*|$)', '', text, count=1)
 
         # "자세히 보기" 제거
         text = re.sub(r'자세히\s*보기', '', text)
 
-        # 하이픈으로 항목 분리
-        items = re.split(r'[-•*]\s*', text)
-
         result = []
-        for item in items:
-            item = item.strip()
-            if item and len(item) > 1:  # 빈 항목 제외
-                result.append(f"[항목] {item}")
+
+        # DN으로 시작하는 키트명 추출 (DNAnimal Screen, DNAnimal Ident 등)
+        kit_pattern = r'(DN(?:Animal\s+(?:Screen|Ident)\s+[A-Za-z\s&]+(?:Kit)?)[^DN]*?)(?=DN|$|\*|필요한)'
+        kits = re.findall(kit_pattern, text, re.IGNORECASE)
+
+        if kits:
+            result.append("[검사 키트]")
+            for kit in kits:
+                kit = kit.strip()
+                # 괄호 안 내용 정리
+                kit = re.sub(r'\s+', ' ', kit)
+                if kit and len(kit) > 5:
+                    result.append(f"  • {kit}")
+
+        # 필요한 시료량 추출
+        sample_match = re.search(r'(필요한\s*시료량?[^*]*)', text)
+        if sample_match:
+            sample_info = sample_match.group(1).strip()
+            sample_info = re.sub(r'\s+', ' ', sample_info)
+            result.append(f"\n[시료량]\n  • {sample_info}")
+
+        # * 로 시작하는 참고 사항 추출
+        notes = re.findall(r'\*\s*([^*]+)', text)
+        if notes:
+            result.append("\n[참고사항]")
+            for note in notes:
+                note = note.strip()
+                note = re.sub(r'\s+', ' ', note)
+                if note and len(note) > 3:
+                    result.append(f"  • {note}")
+
+        # 결과가 없으면 원본 텍스트 정리해서 반환
+        if not result:
+            # 하이픈으로 항목 분리
+            items = re.split(r'[-•]\s*', text)
+            for item in items:
+                item = re.sub(r'\s+', ' ', item).strip()
+                if item and len(item) > 3:
+                    result.append(f"[항목] {item}")
 
         return "\n".join(result) if result else text
 
