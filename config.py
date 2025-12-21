@@ -33,7 +33,7 @@ URL_MAPPING = {
         "검사주기알림": "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198"
     },
     "영양성분검사": {
-        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_241",
+        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_207",
         "9대영양성분": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_193",
         "14대영양성분": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA&question_192"
     },
@@ -85,7 +85,7 @@ ITEM_POPUP_MAPPING = {
 
 # 영양성분검사 팝업 ID 매핑
 NUTRITION_POPUP_MAPPING = {
-    "검사종류": "question_241",
+    "검사종류": "question_207",
     "9대영양성분": "question_193",
     "14대영양성분": "question_192"
 }
