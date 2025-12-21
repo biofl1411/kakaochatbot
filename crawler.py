@@ -383,7 +383,7 @@ class Crawler:
 
         # 제목 제거 (Q로 시작하는 질문 제목 전체)
         # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
-        text = re.sub(r'Q\d+\.[^Q]*?(?=DN|검사|Kit|필요한|해당|개별|\*|$)', '', text, count=1)
+        text = re.sub(r'Q\d+\.[^Q]*?(?=DN|검사|Kit|필요한|해당|개별|\*|-|$)', '', text, count=1)
 
         # "자세히 보기" 제거
         text = re.sub(r'자세히\s*보기', '', text)
@@ -410,6 +410,16 @@ class Crawler:
             sample_info = re.sub(r'\s+', ' ', sample_info)
             result.append(f"\n[시료량]\n  • {sample_info}")
 
+        # "-" 로 시작하는 항목 추출 (예: - 항생물질 28종)
+        dash_items = re.findall(r'-\s*([^-*\n]+?)(?=\s*-|\s*\*|$)', text)
+        if dash_items:
+            result.append("[검사항목]")
+            for item in dash_items:
+                item = item.strip()
+                item = re.sub(r'\s+', ' ', item)
+                if item and len(item) > 2:
+                    result.append(f"  • {item}")
+
         # * 로 시작하는 참고 사항 추출
         notes = re.findall(r'\*\s*([^*]+)', text)
         if notes:
@@ -427,7 +437,7 @@ class Crawler:
             for item in items:
                 item = re.sub(r'\s+', ' ', item).strip()
                 if item and len(item) > 3:
-                    result.append(f"[항목] {item}")
+                    result.append(f"  • {item}")
 
         return "\n".join(result) if result else text
 
