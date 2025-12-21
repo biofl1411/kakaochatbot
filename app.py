@@ -256,6 +256,72 @@ def format_crawled_data(data_text: str) -> str:
     return formatted.strip()
 
 
+def format_nutrition_component_data(data_text: str) -> str:
+    """9대/14대 영양성분 데이터를 특별 형식으로 포맷팅
+
+    - 구분 섹션 제거
+    - 일수와 금액을 결합 (예: 3일 500,000원)
+    - 긴급 안내 메시지 추가
+    - VAT 별도 표시
+    """
+    if not data_text:
+        return data_text
+
+    lines = data_text.split('\n')
+    days_values = []
+    price_values = []
+    note_values = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            if values_part:
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+
+                if header == "일수":
+                    days_values = values
+                elif header == "금액":
+                    price_values = values
+                elif header == "비고":
+                    note_values = values
+                # 구분 섹션은 무시
+
+    result = []
+
+    # 일수 및 금액 결합
+    if days_values and price_values:
+        result.append("📌 일수 및 금액")
+        for i in range(min(len(days_values), len(price_values))):
+            day = days_values[i]
+            price = price_values[i]
+            result.append(f"  • {day} {price}원")
+
+        # 긴급 안내 메시지
+        result.append("")
+        result.append("* 긴급에 해당하는 경우 사전에 긴급 일정을 협의해주세요.")
+
+    # 비고
+    if note_values:
+        result.append("")
+        result.append("📌 비고")
+        for note in note_values:
+            result.append(f"  • {note}")
+
+    # VAT 별도 표시
+    result.append("")
+    result.append("* VAT 별도")
+
+    return '\n'.join(result)
+
+
 def is_image_url(text: str) -> bool:
     """텍스트가 이미지 URL인지 확인"""
     if not text:
@@ -924,7 +990,8 @@ def chatbot():
                     if carousel_response:
                         return carousel_response
 
-                formatted_data = format_crawled_data(db_data['details'])
+                # 9대/14대 영양성분 전용 포맷 적용
+                formatted_data = format_nutrition_component_data(db_data['details'])
                 response_text = f"📊 {user_input}\n\n{formatted_data}"
             else:
                 response_text = f"📊 {user_input}\n\n자세한 내용은 아래 링크를 확인해주세요."
