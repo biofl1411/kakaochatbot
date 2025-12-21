@@ -325,13 +325,6 @@ def format_nutrition_component_data(data_text: str) -> str:
         result.append("")
         result.append("* 긴급에 해당하는 경우 사전에 긴급 일정을 협의해주세요.")
 
-    # 비고
-    if note_values:
-        result.append("")
-        result.append("📌 비고")
-        for note in note_values:
-            result.append(f"  • {note}")
-
     # VAT 별도 표시
     result.append("")
     result.append("* VAT 별도")
