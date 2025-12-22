@@ -1076,6 +1076,9 @@ def chatbot():
             # URL 가져오기
             detail_url = URL_MAPPING.get("영양성분검사", {}).get(user_input)
 
+            # 응답 화면으로 이동 시 현재_메뉴 초기화
+            user_data.pop("현재_메뉴", None)
+
             if db_data and db_data.get("details"):
                 # 데이터에 링크가 포함되어 있는지 확인
                 if has_links_in_data(db_data['details']):
@@ -1110,6 +1113,9 @@ def chatbot():
             # DB에서 크롤링된 데이터 조회
             db_data = get_nutrition_info("영양성분검사", "검사종류")
 
+            # 응답 화면으로 이동 시 현재_메뉴 초기화
+            user_data.pop("현재_메뉴", None)
+
             if db_data and db_data.get("details"):
                 # 데이터에 링크가 포함되어 있는지 확인
                 if has_links_in_data(db_data['details']):
@@ -1117,7 +1123,7 @@ def chatbot():
                     carousel_response = make_carousel_with_links_response(
                         "영양표시 종류",
                         data_sections,
-                        ["검사종류", "영양성분검사", "처음으로"]
+                        ["이전", "처음으로"]
                     )
                     if carousel_response:
                         return carousel_response
@@ -1144,6 +1150,9 @@ def chatbot():
 
             # DB에서 크롤링된 데이터 조회
             db_data = get_nutrition_info("영양성분검사", url_key)
+
+            # 응답 화면으로 이동 시 현재_메뉴 초기화 (이전 버튼이 부모 메뉴로 돌아가도록)
+            user_data.pop("현재_메뉴", None)
 
             if db_data and db_data.get("details"):
                 # 데이터에 링크가 포함되어 있는지 확인
@@ -1199,6 +1208,9 @@ def chatbot():
             # URL 가져오기
             detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
 
+            # 응답 화면으로 이동 시 현재_메뉴 초기화 (이전 버튼이 부모 메뉴로 돌아가도록)
+            user_data.pop("현재_메뉴", None)
+
             if db_data and db_data.get("details"):
                 # 데이터에 링크가 포함되어 있는지 확인
                 if has_links_in_data(db_data['details']):
@@ -1230,6 +1242,9 @@ def chatbot():
 
         # ===== 자가품질검사 > 검사주기알림 =====
         if user_input == "검사주기알림" and user_data.get("검사분야_메뉴") == "자가품질검사":
+            # 응답 화면으로 이동 시 현재_메뉴 초기화 (이전 버튼이 부모 메뉴로 돌아가도록)
+            user_data.pop("현재_메뉴", None)
+
             response_text = """🔔 자가품질검사 주기알림
 
 홈페이지에서 자가품질검사를 하신 경우, 작성하신 제조일자를 기준으로 자동 계산하여 카카오톡 알림을 발송해드립니다.
@@ -1256,6 +1271,9 @@ def chatbot():
 
         # ===== 검사분야 말단 메뉴 응답 =====
         if user_input in INSPECTION_MENU["responses"]:
+            # 응답 화면으로 이동 시 현재_메뉴 초기화 (이전 버튼이 부모 메뉴로 돌아가도록)
+            user_data.pop("현재_메뉴", None)
+
             response_data = INSPECTION_MENU["responses"][user_input]
             return make_response(
                 response_data["text"],
