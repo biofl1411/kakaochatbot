@@ -465,43 +465,65 @@ class Crawler:
         if not text or not section_filter:
             return ""
 
-        # Q 제목 제거
-        text = re.sub(r'Q\d+\.\s*[^1-9]*?(?=\d\))', '', text)
+        logger.info(f"섹션 필터 적용: {section_filter}")
 
         # "Close" 등 버튼 텍스트 제거
         text = re.sub(r'\bClose\b', '', text)
 
-        # 섹션 패턴 찾기 (예: "1) 실측실험" 또는 "2) 가속실험")
-        section_pattern = rf'({re.escape(section_filter)}[^)]*\)?\s*[^\d]*?)(?=\d\)\s|\Z)'
-        match = re.search(section_pattern, text, re.DOTALL)
+        # 공백 정리
+        text = re.sub(r'\s+', ' ', text).strip()
 
-        if match:
-            section_text = match.group(1).strip()
-            # 줄바꿈 정리
-            section_text = re.sub(r'\s+', ' ', section_text)
-            lines = []
+        # 섹션 시작 위치 찾기 (예: "1) 실측실험" 또는 "2) 가속실험")
+        start_match = re.search(rf'{re.escape(section_filter)}', text)
+        if not start_match:
+            logger.warning(f"섹션을 찾을 수 없음: {section_filter}")
+            return ""
 
-            # 제목 추출 (예: "1) 실측실험 (3개월이내 제품)")
-            title_match = re.match(r'(\d\)\s*[^\(]+\([^)]+\))', section_text)
-            if title_match:
-                lines.append(f"📋 {title_match.group(1)}")
-                lines.append("")  # 제목 후 빈 줄
-                section_text = section_text[title_match.end():]
+        # 섹션 시작부터 끝까지 추출
+        section_start = start_match.start()
 
-            # 나머지 내용을 문장별로 정리
-            sentences = re.split(r'(?<=[다요]\.)\s*', section_text)
-            for sent in sentences:
-                sent = sent.strip()
-                if sent and len(sent) > 3:
-                    if sent.startswith('예)'):
-                        lines.append(f"\n💡 예시")
-                        lines.append(f"  {sent[2:].strip()}")
-                    else:
-                        lines.append(f"• {sent}")
+        # 다음 섹션 번호 찾기 (예: 현재 1)이면 2) 찾기, 현재 2)이면 끝까지)
+        current_num = re.match(r'(\d)\)', section_filter)
+        if current_num:
+            next_num = int(current_num.group(1)) + 1
+            next_pattern = rf'\s{next_num}\)\s'
+            next_match = re.search(next_pattern, text[section_start:])
+            if next_match:
+                section_end = section_start + next_match.start()
+            else:
+                section_end = len(text)
+        else:
+            section_end = len(text)
 
-            return '\n'.join(lines)
+        section_text = text[section_start:section_end].strip()
+        logger.info(f"추출된 섹션 텍스트 길이: {len(section_text)}")
 
-        return ""
+        if not section_text:
+            return ""
+
+        lines = []
+
+        # 제목 추출 (예: "1) 실측실험 (3개월이내 제품)")
+        title_match = re.match(r'(\d\)\s*[가-힣]+\s*\([^)]+\))', section_text)
+        if title_match:
+            lines.append(f"📋 {title_match.group(1)}")
+            lines.append("")  # 제목 후 빈 줄
+            section_text = section_text[title_match.end():].strip()
+
+        # 나머지 내용을 문장별로 정리
+        sentences = re.split(r'(?<=[다요]\.)\s*', section_text)
+        for sent in sentences:
+            sent = sent.strip()
+            if sent and len(sent) > 3:
+                if sent.startswith('예)'):
+                    lines.append(f"\n💡 예시")
+                    lines.append(f"  {sent[2:].strip()}")
+                else:
+                    lines.append(f"• {sent}")
+
+        result = '\n'.join(lines)
+        logger.info(f"포맷팅된 결과 길이: {len(result)}")
+        return result
 
     def _extract_items_from_text(self, text: str, category: str = None, section_filter: str = None) -> str:
         """텍스트에서 항목들을 추출하여 포맷팅"""
