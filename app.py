@@ -884,12 +884,46 @@ def chatbot():
 
         # "이전" 버튼 처리
         if user_input == "이전":
-            # 현재 메뉴 상태 확인하여 부모 메뉴로 이동
+            # 1. 먼저 검사분야_메뉴가 있으면 해당 메뉴로 돌아감 (응답 화면에서)
+            current_inspection_menu = user_data.get("검사분야_메뉴")
             current_menu = user_data.get("현재_메뉴")
+
+            # 응답 화면에서 이전 누르면 -> 부모 메뉴로
+            # 현재_메뉴가 없거나, 현재_메뉴와 검사분야_메뉴가 같으면 부모 메뉴로 이동
+            if current_inspection_menu and current_inspection_menu in INSPECTION_MENU["submenus"]:
+                # 현재_메뉴가 검사분야_메뉴와 같으면 -> 캐러셀로 (하위메뉴에서 이전)
+                # 현재_메뉴가 없거나 다르면 -> 검사분야_메뉴로 (응답에서 이전)
+                if current_menu == current_inspection_menu:
+                    # 하위메뉴에서 이전 -> 부모로
+                    parent = INSPECTION_MENU["submenus"][current_menu].get("parent")
+                    if parent == "검사분야":
+                        user_data.pop("현재_메뉴", None)
+                        user_data.pop("검사분야_메뉴", None)
+                        return make_carousel_response(
+                            INSPECTION_MENU["cards"],
+                            quick_replies=["처음으로"]
+                        )
+                    elif parent in INSPECTION_MENU["submenus"]:
+                        submenu = INSPECTION_MENU["submenus"][parent]
+                        user_data["현재_메뉴"] = parent
+                        user_data["검사분야_메뉴"] = parent
+                        return make_response(
+                            f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                            submenu["buttons"]
+                        )
+                else:
+                    # 응답 화면에서 이전 -> 검사분야_메뉴로 돌아감
+                    submenu = INSPECTION_MENU["submenus"][current_inspection_menu]
+                    user_data["현재_메뉴"] = current_inspection_menu
+                    return make_response(
+                        f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                        submenu["buttons"]
+                    )
+
+            # 2. 현재_메뉴만 있는 경우 (하위의 하위 메뉴)
             if current_menu and current_menu in INSPECTION_MENU["submenus"]:
                 parent = INSPECTION_MENU["submenus"][current_menu].get("parent")
                 if parent == "검사분야":
-                    # 부모가 검사분야면 카드 캐러셀로
                     user_data.pop("현재_메뉴", None)
                     user_data.pop("검사분야_메뉴", None)
                     return make_carousel_response(
@@ -897,7 +931,6 @@ def chatbot():
                         quick_replies=["처음으로"]
                     )
                 elif parent in INSPECTION_MENU["submenus"]:
-                    # 부모 메뉴로 이동
                     submenu = INSPECTION_MENU["submenus"][parent]
                     user_data["현재_메뉴"] = parent
                     user_data["검사분야_메뉴"] = parent
@@ -906,7 +939,7 @@ def chatbot():
                         submenu["buttons"]
                     )
 
-            # go_back 함수로 히스토리 기반 복원 시도
+            # 3. go_back 함수로 히스토리 기반 복원 시도
             previous = go_back(user_data)
             if previous:
                 # 이전 상태에 따라 적절한 화면 표시
@@ -949,7 +982,7 @@ def chatbot():
                         ["검사분야", "검사주기", "검사항목"]
                     )
 
-            # 히스토리가 없으면 검사분야 캐러셀로
+            # 4. 히스토리가 없으면 검사분야 캐러셀로
             return make_carousel_response(
                 INSPECTION_MENU["cards"],
                 quick_replies=["처음으로"]
