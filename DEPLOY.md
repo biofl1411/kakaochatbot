@@ -1,5 +1,38 @@
 # 카카오 챗봇 배포 가이드
 
+---
+
+## ⚠️ 중요: 코드 수정 전 필수 확인사항
+
+### 작업 전 반드시 수행할 것
+
+1. **app.py 전체 구조를 먼저 읽고 파악하세요**
+2. **특히 다음 부분은 절대 삭제하지 마세요:**
+   - `make_carousel_response()` 함수
+   - `make_response_with_link()` 함수
+   - `INSPECTION_MENU` 딕셔너리 (cards, submenus, responses)
+   - 검사분야 카드 캐러셀 관련 모든 로직
+   - `format_crawled_data()` 함수
+   - `format_nutrition_component_data()` 함수
+3. **기존 코드를 수정하기 전에 해당 부분의 역할을 설명해주세요**
+4. **코드 삭제는 명시적으로 요청하지 않는 한 하지 마세요**
+
+### 하드코딩 금지 원칙
+
+- 챗봇 응답 내용은 **크롤링 데이터를 사용**해야 합니다
+- 이미지나 스크린샷 내용을 보고 DB에 직접 넣지 마세요
+- 크롤링이 안 되면 **크롤러를 수정**하세요
+- `INSPECTION_MENU["responses"]`에 하드코딩된 응답이 있으면 제거하고 DB 조회로 대체하세요
+
+### 포맷팅 원칙
+
+- 크롤링된 데이터는 **가독성 있게 포맷팅**해야 합니다
+- 이모지 헤더 사용: 📋, 🧪, ⚠️, 💡
+- 섹션 간 줄바꿈 유지
+- 불릿 포인트(•) 일관성 유지
+
+---
+
 ## 1. 프로젝트 개요
 
 바이오푸드랩(biofl.co.kr) 카카오톡 챗봇 - 식품 검사 안내 서비스
@@ -255,3 +288,63 @@ claude/inspection-card-carousel-Qjngy
 ```bash
 cd /home/biofl/kakaochatbot && git fetch origin claude/inspection-card-carousel-Qjngy && git reset --hard origin/claude/inspection-card-carousel-Qjngy && sudo fuser -k 5000/tcp && sleep 2 && source venv/bin/activate && python3 app.py &
 ```
+
+---
+
+## 11. 핵심 파일 역할
+
+| 파일 | 역할 | 수정 시 주의사항 |
+|------|------|-----------------|
+| `app.py` | 메인 챗봇 로직, 라우팅, 응답 생성 | INSPECTION_MENU, make_carousel_response 절대 삭제 금지 |
+| `config.py` | URL 매핑, Popup ID, 섹션 필터 | 크롤링 대상 변경 시 수정 |
+| `crawler.py` | 웹 크롤링, 텍스트 추출/포맷팅 | 포맷팅 함수 수정 시 가독성 유지 |
+| `models.py` | DB 모델, CRUD 함수 | 스키마 변경 시 주의 |
+| `vision_ocr.py` | 이미지 분석 (선택사항) | Google Vision API 키 필요 |
+
+---
+
+## 12. 자주 발생하는 문제
+
+### 챗봇이 응답 안 함
+1. 서버가 실행 중인지 확인: `pgrep -f "python3 app.py"`
+2. 포트 확인: `sudo lsof -i :5000`
+3. 로그 확인: `tail -f logs/chatbot.log`
+
+### 크롤링 데이터가 안 나옴
+1. DB에 데이터 있는지 확인:
+   ```python
+   from models import get_nutrition_info
+   print(get_nutrition_info('카테고리', '메뉴'))
+   ```
+2. 크롤링 재실행:
+   ```python
+   from crawler import Crawler
+   Crawler().crawl_general_info()
+   ```
+
+### 메뉴 상태가 저장 안 됨
+- `user_data["검사분야_메뉴"]` 설정 확인
+- `app.py`의 메뉴 상태 저장 로직 확인 (약 930번째 줄)
+
+### 섹션 필터링 안 됨
+- `config.py`의 `SECTION_FILTER` 확인
+- `crawler.py`의 `_extract_section_text()` 함수 확인
+
+---
+
+## 13. 새 기능 추가 체크리스트
+
+- [ ] `config.py`에 URL 및 Popup ID 추가
+- [ ] `config.py`의 `SECTION_FILTER` 추가 (필요 시)
+- [ ] `app.py`의 `INSPECTION_MENU["submenus"]`에 메뉴 추가
+- [ ] `app.py`의 `menu_items_map`에 항목 추가
+- [ ] `app.py`의 메뉴 상태 저장 로직 추가
+- [ ] 크롤링 테스트
+- [ ] 챗봇 응답 테스트
+
+---
+
+## 14. 연락처
+
+- GitHub: https://github.com/biofl1411/kakaochatbot
+- 웹사이트: https://www.biofl.co.kr
