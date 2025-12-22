@@ -486,10 +486,11 @@ class Crawler:
         current_num = re.match(r'(\d)\)', section_filter)
         if current_num:
             next_num = int(current_num.group(1)) + 1
-            next_pattern = rf'\s{next_num}\)\s'
-            next_match = re.search(next_pattern, text[section_start:])
+            # 다음 섹션 패턴 (공백 유무 상관없이 한글로 시작하는 섹션)
+            next_pattern = rf'{next_num}\)\s*[가-힣]'
+            next_match = re.search(next_pattern, text[section_start + 10:])  # 현재 섹션 제목 이후부터 검색
             if next_match:
-                section_end = section_start + next_match.start()
+                section_end = section_start + 10 + next_match.start()
             else:
                 section_end = len(text)
         else:
