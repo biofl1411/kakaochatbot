@@ -407,7 +407,49 @@ class Crawler:
 
         return '\n'.join(result) if result else text
 
-    def _extract_items_from_text(self, text: str, category: str = None) -> str:
+    def _extract_section_text(self, text: str, section_filter: str) -> str:
+        """텍스트에서 특정 섹션만 추출 (소비기한설정 등)"""
+        if not text or not section_filter:
+            return ""
+
+        # Q 제목 제거
+        text = re.sub(r'Q\d+\.\s*[^1-9]*?(?=\d\))', '', text)
+
+        # "Close" 등 버튼 텍스트 제거
+        text = re.sub(r'\bClose\b', '', text)
+
+        # 섹션 패턴 찾기 (예: "1) 실측실험" 또는 "2) 가속실험")
+        # 해당 섹션부터 다음 섹션 또는 끝까지 추출
+        section_pattern = rf'({re.escape(section_filter)}[^)]*\)?\s*[^\d]*?)(?=\d\)\s|\Z)'
+        match = re.search(section_pattern, text, re.DOTALL)
+
+        if match:
+            section_text = match.group(1).strip()
+            # 줄바꿈 정리
+            section_text = re.sub(r'\s+', ' ', section_text)
+            # 문장별로 정리
+            lines = []
+            # 제목 추출
+            title_match = re.match(r'(\d\)\s*[^\(]+\([^)]+\))', section_text)
+            if title_match:
+                lines.append(f"📋 {title_match.group(1)}\n")
+                section_text = section_text[title_match.end():]
+
+            # 나머지 내용 정리
+            sentences = re.split(r'(?<=[다요]\.)\s*', section_text)
+            for sent in sentences:
+                sent = sent.strip()
+                if sent and len(sent) > 3:
+                    if sent.startswith('예)'):
+                        lines.append(f"\n💡 {sent}")
+                    else:
+                        lines.append(f"• {sent}")
+
+            return '\n'.join(lines)
+
+        return ""
+
+    def _extract_items_from_text(self, text: str, category: str = None, section_filter: str = None) -> str:
         """텍스트에서 항목들을 추출하여 포맷팅"""
         if not text:
             return ""
@@ -415,6 +457,10 @@ class Crawler:
         # 자가품질검사는 일반 텍스트 형식 사용
         if category == "자가품질검사":
             return self._extract_general_text(text)
+
+        # 소비기한설정은 섹션 필터 적용
+        if category == "소비기한설정" and section_filter:
+            return self._extract_section_text(text, section_filter)
 
         # 제목 제거 (Q로 시작하는 질문 제목 전체)
         # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
@@ -529,7 +575,7 @@ class Crawler:
                         # 테이블이 없으면 전체 텍스트 추출 후 정제
                         raw_text = target_element.get_text(strip=True)
                         if raw_text:
-                            details = self._extract_items_from_text(raw_text, category)
+                            details = self._extract_items_from_text(raw_text, category, section_filter)
                             if details:
                                 save_nutrition_info(category, menu_type, details)
                                 total_count += 1
