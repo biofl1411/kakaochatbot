@@ -181,7 +181,7 @@ git reset --hard origin/<브랜치명>
 sudo fuser -k 5000/tcp
 sleep 2
 source venv/bin/activate
-python3 app.py &
+nohup python3 app.py > logs/server.log 2>&1 &
 ```
 
 ### 방법 2: 크롤링 포함 배포
@@ -197,7 +197,7 @@ git reset --hard origin/<브랜치명>
 sudo fuser -k 5000/tcp
 sleep 2
 source venv/bin/activate
-python3 app.py &
+nohup python3 app.py > logs/server.log 2>&1 &
 
 # 크롤링 실행 (데이터 갱신)
 python3 -c "
@@ -286,7 +286,7 @@ claude/inspection-card-carousel-Qjngy
 
 ### 배포 명령어 (복사용)
 ```bash
-cd /home/biofl/kakaochatbot && git fetch origin claude/inspection-card-carousel-Qjngy && git reset --hard origin/claude/inspection-card-carousel-Qjngy && sudo fuser -k 5000/tcp && sleep 2 && source venv/bin/activate && python3 app.py &
+cd /home/biofl/kakaochatbot && git fetch origin claude/inspection-card-carousel-Qjngy && git reset --hard origin/claude/inspection-card-carousel-Qjngy && sudo fuser -k 5000/tcp && sleep 2 && source venv/bin/activate && nohup python3 app.py > logs/server.log 2>&1 &
 ```
 
 ---
