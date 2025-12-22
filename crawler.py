@@ -376,10 +376,45 @@ class Crawler:
 
         return text.strip()
 
-    def _extract_items_from_text(self, text: str) -> str:
+    def _extract_general_text(self, text: str) -> str:
+        """일반 텍스트 형식의 팝업 내용 추출 (자가품질검사 등)"""
+        if not text:
+            return ""
+
+        # Q 제목 제거
+        text = re.sub(r'Q\d+\.\s*[^\n]*', '', text)
+
+        # "자세히 보기", "Close" 등 버튼 텍스트 제거
+        text = re.sub(r'자세히\s*보기', '', text)
+        text = re.sub(r'\bClose\b', '', text)
+
+        # 문장 단위로 분리 (마침표, 물음표, 느낌표, 다. 등으로 끝나는 문장)
+        # 한글 문장 끝 패턴
+        sentences = re.split(r'(?<=[다요음됩니까]\.)\s*', text)
+
+        result = []
+        for sent in sentences:
+            sent = sent.strip()
+            sent = re.sub(r'\s+', ' ', sent)
+            if sent and len(sent) > 5:
+                # - 또는 ※ 로 시작하는 항목은 별도 줄로
+                if sent.startswith('-') or sent.startswith('※'):
+                    result.append(f"\n{sent}")
+                elif sent.startswith('관련 법령'):
+                    result.append(f"\n📋 {sent}")
+                else:
+                    result.append(sent)
+
+        return '\n'.join(result) if result else text
+
+    def _extract_items_from_text(self, text: str, category: str = None) -> str:
         """텍스트에서 항목들을 추출하여 포맷팅"""
         if not text:
             return ""
+
+        # 자가품질검사는 일반 텍스트 형식 사용
+        if category == "자가품질검사":
+            return self._extract_general_text(text)
 
         # 제목 제거 (Q로 시작하는 질문 제목 전체)
         # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
@@ -494,7 +529,7 @@ class Crawler:
                         # 테이블이 없으면 전체 텍스트 추출 후 정제
                         raw_text = target_element.get_text(strip=True)
                         if raw_text:
-                            details = self._extract_items_from_text(raw_text)
+                            details = self._extract_items_from_text(raw_text, category)
                             if details:
                                 save_nutrition_info(category, menu_type, details)
                                 total_count += 1
