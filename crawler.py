@@ -470,8 +470,8 @@ class Crawler:
         # "Close" 등 버튼 텍스트 제거
         text = re.sub(r'\bClose\b', '', text)
 
-        # 공백 정리
-        text = re.sub(r'\s+', ' ', text).strip()
+        # 공백 정리 (줄바꿈은 유지)
+        text = re.sub(r'[ \t]+', ' ', text).strip()
 
         # 섹션 시작 위치 찾기 (예: "1) 실측실험" 또는 "2) 가속실험")
         start_match = re.search(rf'{re.escape(section_filter)}', text)
@@ -488,7 +488,7 @@ class Crawler:
             next_num = int(current_num.group(1)) + 1
             # 다음 섹션 패턴 (공백 유무 상관없이 한글로 시작하는 섹션)
             next_pattern = rf'{next_num}\)\s*[가-힣]'
-            next_match = re.search(next_pattern, text[section_start + 10:])  # 현재 섹션 제목 이후부터 검색
+            next_match = re.search(next_pattern, text[section_start + 10:])
             if next_match:
                 section_end = section_start + 10 + next_match.start()
             else:
@@ -518,70 +518,51 @@ class Crawler:
             lines.append("")
             section_text = section_text[title_match.end():].strip()
 
-        # 검사 기간 추출
-        period_match = re.search(r'검사\s*기간\s*[:：]?\s*([^,，]+?)(?=,|，|검사\s*항목|검사\s*수수료|예\)|$)', section_text)
-        if period_match:
-            period = period_match.group(1).strip()
-            lines.append("📌 검사 기간")
-            lines.append(f"  • {period}")
-            lines.append("")
+        # 본문 설명과 예시 분리
+        example_split = re.split(r'예\)\s*', section_text, maxsplit=1)
 
-        # 검사 항목 추출
-        items_match = re.search(r'검사\s*항목\s*[:：]?\s*([^,，]+?)(?=,|，|검사\s*수수료|예\)|$)', section_text)
-        if items_match:
-            items = items_match.group(1).strip()
-            lines.append("📌 검사 항목")
-            lines.append(f"  • {items}")
-            lines.append("")
+        # 본문 설명 추출
+        if example_split[0].strip():
+            description = example_split[0].strip()
+            # 공백 정리
+            description = re.sub(r'\s+', ' ', description)
 
-        # 검사 수수료 추출
-        fee_match = re.search(r'검사\s*수수료\s*[:：]?\s*([^예]+?)(?=예\)|$)', section_text)
-        if fee_match:
-            fee = fee_match.group(1).strip()
-            # 금액 포맷팅
-            fee = re.sub(r'(\d{1,3}(?:,\d{3})*)\s*원', r'\1원', fee)
-            lines.append("📌 검사 수수료")
-            lines.append(f"  • {fee}")
+            # 설명 텍스트 포맷팅
+            lines.append("📌 설명")
+            lines.append(f"  {description}")
             lines.append("")
 
         # 예시 추출
-        example_match = re.search(r'예\)\s*(.+?)(?=\*|$)', section_text)
-        if example_match:
-            example = example_match.group(1).strip()
-            lines.append("💡 예시")
-            lines.append(f"  {example}")
-            lines.append("")
+        if len(example_split) > 1 and example_split[1].strip():
+            example = example_split[1].strip()
+            # * 이후는 참고사항이므로 분리
+            note_split = re.split(r'\s*\*\s*', example, maxsplit=1)
+            example_text = note_split[0].strip()
 
-        # 주의사항/참고사항 추출 (* 로 시작)
-        notes = re.findall(r'\*\s*([^*]+)', section_text)
-        if notes:
-            lines.append("⚠️ 참고사항")
-            for note in notes:
-                note = note.strip()
-                if note and len(note) > 3:
-                    lines.append(f"  • {note}")
+            if example_text:
+                # 공백 정리
+                example_text = re.sub(r'\s+', ' ', example_text)
+                lines.append("💡 예시")
+                lines.append(f"  {example_text}")
+                lines.append("")
 
-        # 결과가 비어있으면 기본 포맷 적용
-        if len(lines) <= 2:
-            lines = []
-            if "실측실험" in section_filter:
-                lines.append("📋 실측실험 (3개월 이내 제품)")
-            elif "가속실험" in section_filter:
-                lines.append("📋 가속실험 (3개월 이상 제품)")
-            lines.append("")
+            # 참고사항
+            if len(note_split) > 1 and note_split[1].strip():
+                note = note_split[1].strip()
+                note = re.sub(r'\s+', ' ', note)
+                lines.append("⚠️ 참고사항")
+                lines.append(f"  * {note}")
 
-            # 문장별로 분리
-            sentences = re.split(r'(?<=[다요니됩]\.)\s*', section_text)
-            for sent in sentences:
-                sent = sent.strip()
-                if sent and len(sent) > 5:
-                    if sent.startswith('예)'):
-                        lines.append(f"\n💡 예시")
-                        lines.append(f"  {sent[2:].strip()}")
-                    elif sent.startswith('*'):
-                        lines.append(f"⚠️ {sent[1:].strip()}")
-                    else:
-                        lines.append(f"• {sent}")
+        # 본문에서 참고사항 추출 (예시가 없는 경우)
+        if len(example_split) == 1:
+            notes = re.findall(r'\*\s*([^*]+)', section_text)
+            if notes:
+                lines.append("⚠️ 참고사항")
+                for note in notes:
+                    note = note.strip()
+                    note = re.sub(r'\s+', ' ', note)
+                    if note and len(note) > 3:
+                        lines.append(f"  * {note}")
 
         result = '\n'.join(lines)
         # 연속된 빈 줄 정리
