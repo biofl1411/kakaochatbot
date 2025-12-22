@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
-from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT
+from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING
 from models import (
     init_database,
     get_inspection_item,
@@ -21,7 +21,8 @@ from models import (
     find_similar_cycles,
     get_last_crawl_time,
     can_use_vision_api,
-    get_vision_api_remaining
+    get_vision_api_remaining,
+    get_nutrition_info
 )
 from vision_ocr import extract_food_type_from_image, is_vision_api_available
 
@@ -42,6 +43,300 @@ CORS(app)
 
 # 사용자 상태 저장 (세션 관리)
 user_state = {}
+
+
+def format_korean_spacing(text: str) -> str:
+    """한국어 텍스트에 적절한 띄어쓰기 추가"""
+    if not text:
+        return text
+
+    # 조사/어미 앞에 붙어있는 단어들 사이에 띄어쓰기 추가
+    patterns = [
+        # ~에 한한다, ~에 한하며
+        (r'([가-힣])에한한다', r'\1에 한한다'),
+        (r'([가-힣])에한하며', r'\1에 한하며'),
+        # ~을/를 제외한다
+        (r'([가-힣])은제외한다', r'\1은 제외한다'),
+        (r'([가-힣])를제외한다', r'\1를 제외한다'),
+        # ~또는~
+        (r'([가-힣])또는([가-힣])', r'\1 또는 \2'),
+        # ~및~
+        (r'([가-힣])및([가-힣])', r'\1 및 \2'),
+        # ~의 합으로서
+        (r'의합으로서', r'의 합으로서'),
+        (r'의합으로 서', r'의 합으로서'),
+        # ~를 함유한
+        (r'를함유한', r'를 함유한'),
+        # ~이상~
+        (r'([0-9])이상', r'\1 이상'),
+        # ~미만~
+        (r'([0-9])미만', r'\1 미만'),
+        # ~이하~
+        (r'([0-9])이하', r'\1 이하'),
+        # ~초과~
+        (r'([0-9])초과', r'\1 초과'),
+        # 단위 뒤
+        (r'(mg|g|kg|ml|L|%|회)([가-힣])', r'\1 \2'),
+    ]
+
+    result = text
+    for pattern, replacement in patterns:
+        result = re.sub(pattern, replacement, result)
+
+    return result
+
+
+def format_items_list(items_text: str) -> str:
+    """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환
+
+    괄호 [], () 안의 콤마는 항목 구분자가 아니므로 무시
+    """
+    if not items_text:
+        return items_text
+
+    # 괄호 깊이를 추적하며 콤마로 분리
+    items = []
+    current_item = ""
+    bracket_depth = 0  # [] 깊이
+    paren_depth = 0    # () 깊이
+
+    for char in items_text:
+        if char == '[':
+            bracket_depth += 1
+            current_item += char
+        elif char == ']':
+            bracket_depth -= 1
+            current_item += char
+        elif char == '(':
+            paren_depth += 1
+            current_item += char
+        elif char == ')':
+            paren_depth -= 1
+            current_item += char
+        elif char == ',' and bracket_depth == 0 and paren_depth == 0:
+            # 괄호 밖의 콤마 -> 항목 구분자
+            if current_item.strip():
+                items.append(current_item.strip())
+            current_item = ""
+        else:
+            current_item += char
+
+    # 마지막 항목 추가
+    if current_item.strip():
+        items.append(current_item.strip())
+
+    # 각 항목에 띄어쓰기 추가 후 bullet point로 포맷팅
+    formatted_items = []
+    for item in items:
+        formatted_item = format_korean_spacing(item)
+        formatted_items.append(f"• {formatted_item}")
+
+    return '\n'.join(formatted_items)
+
+
+def parse_data_with_links(data_text: str) -> list:
+    """크롤링된 데이터에서 텍스트와 URL을 추출
+
+    크롤러가 저장한 형식:
+    [헤더] 값1{{URL:http://...}} | 값2{{URL:http://...}}
+
+    Returns:
+        list of dict: [{"header": str, "items": [{"text": str, "url": str or None}]}]
+    """
+    if not data_text:
+        return []
+
+    url_pattern = re.compile(r'\{\{URL:(.*?)\}\}')
+    lines = data_text.split('\n')
+    result = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            section = {"header": header, "items": []}
+
+            if values_part:
+                # | 로 구분된 값들
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+                for value in values:
+                    # URL 추출
+                    url_match = url_pattern.search(value)
+                    if url_match:
+                        url = url_match.group(1)
+                        text = url_pattern.sub('', value).strip()
+                        # "자세히 보기" 텍스트 제거
+                        text = re.sub(r'자세히\s*보기', '', text).strip()
+                        section["items"].append({"text": text, "url": url})
+                    else:
+                        text = format_korean_spacing(value)
+                        section["items"].append({"text": text, "url": None})
+
+            result.append(section)
+        else:
+            # 일반 텍스트
+            url_match = url_pattern.search(line)
+            if url_match:
+                url = url_match.group(1)
+                text = url_pattern.sub('', line).strip()
+                text = re.sub(r'자세히\s*보기', '', text).strip()
+                result.append({"header": None, "items": [{"text": text, "url": url}]})
+            else:
+                result.append({"header": None, "items": [{"text": format_korean_spacing(line), "url": None}]})
+
+    return result
+
+
+def has_links_in_data(data_text: str) -> bool:
+    """데이터에 URL이 포함되어 있는지 확인"""
+    return '{{URL:' in data_text if data_text else False
+
+
+def format_crawled_data(data_text: str) -> str:
+    """크롤링된 데이터를 가독성 있게 포맷팅
+
+    크롤러가 저장한 형식:
+    [헤더] 값1 | 값2 | 값3
+    또는
+    [헤더]
+      • 항목1
+      • 항목2
+
+    변환 후:
+    📌 헤더
+      • 값1
+      • 값2
+    """
+    if not data_text:
+        return data_text
+
+    # URL 패턴 제거 (텍스트만 표시할 때)
+    url_pattern = re.compile(r'\{\{URL:.*?\}\}')
+
+    lines = data_text.split('\n')
+    result = []
+
+    for line in lines:
+        original_line = line
+        line = line.strip()
+        if not line:
+            continue
+
+        # 이미 bullet point로 시작하는 라인 (크롤러에서 이미 포맷된 경우)
+        if line.startswith('•') or original_line.startswith('  •'):
+            clean_line = url_pattern.sub('', line).strip()
+            clean_line = re.sub(r'자세히\s*보기', '', clean_line).strip()
+            if clean_line:
+                # • 로 시작하면 그대로 유지
+                if clean_line.startswith('•'):
+                    result.append(f"  {clean_line}")
+                else:
+                    result.append(f"  • {clean_line}")
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            # 헤더 추가
+            result.append(f"\n📌 {header}")
+
+            if values_part:
+                # | 로 구분된 값들을 bullet point로
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+                for value in values:
+                    # URL 패턴 제거
+                    clean_value = url_pattern.sub('', value).strip()
+                    # "자세히 보기" 텍스트 제거
+                    clean_value = re.sub(r'자세히\s*보기', '', clean_value).strip()
+                    if clean_value:
+                        formatted_value = format_korean_spacing(clean_value)
+                        result.append(f"  • {formatted_value}")
+        else:
+            # 일반 텍스트는 그대로 (띄어쓰기 적용)
+            clean_line = url_pattern.sub('', line).strip()
+            clean_line = re.sub(r'자세히\s*보기', '', clean_line).strip()
+            if clean_line:
+                result.append(format_korean_spacing(clean_line))
+
+    # 첫 줄의 불필요한 줄바꿈 제거
+    formatted = '\n'.join(result)
+    return formatted.strip()
+
+
+def format_nutrition_component_data(data_text: str) -> str:
+    """9대/14대 영양성분 데이터를 특별 형식으로 포맷팅
+
+    - 구분 섹션 제거
+    - 일수와 금액을 결합 (예: 3일 500,000원)
+    - 긴급 안내 메시지 추가
+    - VAT 별도 표시
+    """
+    if not data_text:
+        return data_text
+
+    lines = data_text.split('\n')
+    days_values = []
+    price_values = []
+    note_values = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        # [헤더] 값1 | 값2 형식 처리
+        if line.startswith('[') and ']' in line:
+            bracket_end = line.index(']')
+            header = line[1:bracket_end]
+            values_part = line[bracket_end + 1:].strip()
+
+            if values_part:
+                values = [v.strip() for v in values_part.split('|') if v.strip()]
+
+                if header == "일수":
+                    days_values = values
+                elif header == "금액":
+                    price_values = values
+                elif header == "비고":
+                    note_values = values
+                # 구분 섹션은 무시
+
+    result = []
+
+    # 일수 및 금액 결합
+    if days_values and price_values:
+        result.append("📌 일수 및 금액")
+        for i in range(min(len(days_values), len(price_values))):
+            day = days_values[i]
+            price = price_values[i]
+            result.append(f"  • {day} {price}원")
+
+        # 긴급 안내 메시지
+        result.append("")
+        result.append("* 긴급에 해당하는 경우 사전에 긴급 일정을 협의해주세요.")
+
+    # 비고
+    if note_values:
+        result.append("")
+        result.append("📌 비고")
+        for note in note_values:
+            result.append(f"  • {note}")
+
+    # VAT 별도 표시
+    result.append("")
+    result.append("* VAT 별도")
+
+    return '\n'.join(result)
 
 
 def is_image_url(text: str) -> bool:
@@ -77,9 +372,482 @@ def make_response(text: str, buttons: list = None):
     return jsonify(response)
 
 
+def make_response_with_link(text: str, link_label: str, link_url: str, buttons: list = None):
+    """카카오 챗봇 응답 형식 생성 (링크 버튼 포함)
+
+    Args:
+        text: 응답 텍스트
+        link_label: 링크 버튼 라벨 (예: "자세히 보기")
+        link_url: 링크 URL
+        buttons: 하단 퀵리플라이 버튼 리스트
+    """
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "basicCard": {
+                        "description": text,
+                        "buttons": [
+                            {
+                                "label": link_label,
+                                "action": "webLink",
+                                "webLinkUrl": link_url
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+
+    if buttons:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in buttons
+        ]
+
+    return jsonify(response)
+
+
+def make_carousel_response(cards: list, quick_replies: list = None):
+    """카카오 챗봇 카드 캐러셀 응답 형식 생성
+
+    Args:
+        cards: 카드 리스트. 각 카드는 dict로 {"title": str, "description": str, "buttons": list, "thumbnail": str(optional)}
+        quick_replies: 하단 퀵리플라이 버튼 리스트
+    """
+    items = []
+    for card in cards:
+        item = {
+            "title": card.get("title", ""),
+            "description": card.get("description", ""),
+            "buttons": [
+                {
+                    "label": btn["label"],
+                    "action": "message",
+                    "messageText": btn.get("messageText", btn["label"])
+                }
+                for btn in card.get("buttons", [])
+            ]
+        }
+        # 썸네일 이미지가 있으면 추가
+        if card.get("thumbnail"):
+            item["thumbnail"] = {"imageUrl": card["thumbnail"]}
+        items.append(item)
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "carousel": {
+                        "type": "basicCard",
+                        "items": items
+                    }
+                }
+            ]
+        }
+    }
+
+    if quick_replies:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in quick_replies
+        ]
+
+    return jsonify(response)
+
+
+def make_list_card_response(header: str, items: list, quick_replies: list = None):
+    """카카오 챗봇 ListCard 응답 형식 생성 (링크 버튼 포함)
+
+    Args:
+        header: 리스트 카드 헤더 텍스트
+        items: 아이템 리스트. [{"text": str, "url": str or None}, ...]
+        quick_replies: 하단 퀵리플라이 버튼 리스트
+    """
+    list_items = []
+    for item in items[:5]:  # 최대 5개까지만 표시
+        list_item = {
+            "title": item["text"]
+        }
+        if item.get("url"):
+            list_item["link"] = {"web": item["url"]}
+        list_items.append(list_item)
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "listCard": {
+                        "header": {"title": header},
+                        "items": list_items
+                    }
+                }
+            ]
+        }
+    }
+
+    if quick_replies:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in quick_replies
+        ]
+
+    return jsonify(response)
+
+
+def make_carousel_with_links_response(title: str, data_sections: list, quick_replies: list = None):
+    """URL이 포함된 데이터를 카드 캐러셀로 표시
+
+    Args:
+        title: 전체 제목
+        data_sections: parse_data_with_links()의 결과
+        quick_replies: 하단 퀵리플라이 버튼 리스트
+    """
+    cards = []
+
+    for section in data_sections:
+        if not section.get("items"):
+            continue
+
+        header = section.get("header", "")
+
+        # 각 아이템을 개별 카드로 (링크가 있는 경우)
+        for item in section["items"]:
+            if item.get("url"):
+                card = {
+                    "title": item["text"][:40] if len(item["text"]) > 40 else item["text"],
+                    "description": header if header else "",
+                    "buttons": [
+                        {
+                            "label": "🔗 자세히 보기",
+                            "action": "webLink",
+                            "webLinkUrl": item["url"]
+                        }
+                    ]
+                }
+                cards.append(card)
+
+    if not cards:
+        # 링크 없는 경우 일반 텍스트 반환
+        return None
+
+    # 최대 10개 카드
+    cards = cards[:10]
+
+    response = {
+        "version": "2.0",
+        "template": {
+            "outputs": [
+                {
+                    "carousel": {
+                        "type": "basicCard",
+                        "items": cards
+                    }
+                }
+            ]
+        }
+    }
+
+    if quick_replies:
+        response["template"]["quickReplies"] = [
+            {"label": btn, "action": "message", "messageText": btn}
+            for btn in quick_replies
+        ]
+
+    return jsonify(response)
+
+
+# 카드 썸네일 이미지 URL (버전 파라미터로 캐시 무효화)
+CARD_IMAGE_BASE_URL = "http://14.7.14.31:5000/static/images/"
+CARD_IMAGE_VERSION = "?v=2"
+
+# 검사 분야 메뉴 구조 정의
+INSPECTION_MENU = {
+    "cards": [
+        {
+            "title": "",
+            "description": "",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_01.jpg{CARD_IMAGE_VERSION}",
+            "buttons": [
+                {"label": "자가품질검사"},
+                {"label": "영양성분검사"},
+                {"label": "소비기한설정"}
+            ]
+        },
+        {
+            "title": "",
+            "description": "",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_02.jpg{CARD_IMAGE_VERSION}",
+            "buttons": [
+                {"label": "항생물질"},
+                {"label": "잔류농약"},
+                {"label": "방사능"}
+            ]
+        },
+        {
+            "title": "",
+            "description": "",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_03.jpg{CARD_IMAGE_VERSION}",
+            "buttons": [
+                {"label": "비건"},
+                {"label": "할랄"},
+                {"label": "동물DNA"}
+            ]
+        },
+        {
+            "title": "",
+            "description": "",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_04.jpg{CARD_IMAGE_VERSION}",
+            "buttons": [
+                {"label": "알레르기"},
+                {"label": "글루텐Free"},
+                {"label": "이물질검사"}
+            ]
+        },
+        {
+            "title": "",
+            "description": "",
+            "thumbnail": f"{CARD_IMAGE_BASE_URL}card_05.jpg{CARD_IMAGE_VERSION}",
+            "buttons": [
+                {"label": "홈페이지안내"},
+                {"label": "성적서문의"},
+                {"label": "시료접수안내"}
+            ]
+        }
+    ],
+    # 하위 메뉴 정의
+    "submenus": {
+        # 1차 하위 메뉴 (캐러셀 → 하위 메뉴)
+        "자가품질검사": {
+            "title": "자가품질검사",
+            "buttons": ["식품", "축산", "검사주기알림", "이전", "처음으로"]
+        },
+        "영양성분검사": {
+            "title": "영양성분검사",
+            "buttons": ["검사종류", "표시대상확인", "1회제공량산표", "이전", "처음으로"]
+        },
+        "소비기한설정": {
+            "title": "소비기한설정",
+            "buttons": ["가속실험", "실측실험", "검사수수료", "이전", "처음으로"]
+        },
+        "항생물질": {
+            "title": "항생물질",
+            "buttons": ["검사종류", "이전", "처음으로"]
+        },
+        "잔류농약": {
+            "title": "잔류농약",
+            "buttons": ["검사종류", "이전", "처음으로"]
+        },
+        "방사능": {
+            "title": "방사능 검사",
+            "buttons": ["검사안내", "이전", "처음으로"]
+        },
+        "비건": {
+            "title": "비건 검사",
+            "buttons": ["검사안내", "사용키트", "이전", "처음으로"]
+        },
+        "할랄": {
+            "title": "할랄 검사",
+            "buttons": ["검사안내", "사용키트", "이전", "처음으로"]
+        },
+        "동물DNA": {
+            "title": "동물DNA 검사",
+            "buttons": ["검사안내", "이전", "처음으로"]
+        },
+        "알레르기": {
+            "title": "알레르기 검사 - 검사종류",
+            "buttons": ["RT-PCR", "Elisa", "이전", "처음으로"]
+        },
+        "글루텐Free": {
+            "title": "글루텐Free 검사",
+            "buttons": ["Free기준", "키트", "이전", "처음으로"]
+        },
+        "이물질검사": {
+            "title": "이물질검사",
+            "buttons": ["금속류", "고무/플라스틱", "기타", "이전", "처음으로"]
+        },
+        "홈페이지안내": {
+            "title": "홈페이지 안내",
+            "buttons": ["견적서", "의뢰서작성", "할인쿠폰", "이전", "처음으로"]
+        },
+        "성적서문의": {
+            "title": "성적서 문의",
+            "buttons": ["외국어", "발급문의", "이전", "처음으로"]
+        },
+        "시료접수안내": {
+            "title": "시료접수 안내",
+            "buttons": ["시료접수", "방문수거", "오시는길", "이전", "처음으로"]
+        },
+        # 2차 하위 메뉴 (하위 → 더 깊은 하위)
+        "기타": {
+            "title": "이물질검사 - 기타",
+            "buttons": ["손톱", "뼈", "더보기", "이전", "처음으로"]
+        },
+        "더보기": {
+            "title": "이물질검사 - 기타 더보기",
+            "buttons": ["탄화물", "원료의일부", "모르겠음", "이전", "처음으로"]
+        },
+        "자가품질검사_식품": {
+            "title": "자가품질검사 - 식품",
+            "buttons": ["검사주기", "검사항목", "검사수수료", "이전", "처음으로"]
+        },
+        "자가품질검사_축산": {
+            "title": "자가품질검사 - 축산",
+            "buttons": ["검사주기", "검사항목", "검사수수료", "이전", "처음으로"]
+        },
+        "영양성분검사_검사종류": {
+            "title": "영양성분검사 - 검사종류",
+            "buttons": ["영양표시 종류", "9대 영양성분", "14대 영양성분", "이전", "처음으로"]
+        }
+    },
+    # 말단 메뉴 응답 (텍스트 응답)
+    "responses": {
+        "검사주기알림": {
+            "text": "🔔 검사주기알림 서비스\n\n자가품질검사 주기에 맞춰 알림을 받으실 수 있습니다.\n\n📞 문의: 02-XXX-XXXX\n🔗 홈페이지: www.biofl.co.kr"
+        },
+        "가속실험": {
+            "text": "⏱️ 가속실험 안내\n\n식품의 소비기한을 과학적으로 설정하기 위한 가속노화 실험입니다.\n\n• 실험기간: 약 2~4주\n• 온도조건: 상온/냉장/냉동 제품별 상이\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "실측실험": {
+            "text": "📊 실측실험 안내\n\n실제 유통환경과 동일한 조건에서 진행하는 실험입니다.\n\n• 실험기간: 설정하고자 하는 소비기한 + α\n• 정확도가 높음\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "검사수수료": {
+            "text": "💰 검사수수료 안내\n\n검사 항목 및 수량에 따라 수수료가 상이합니다.\n\n🔗 홈페이지에서 견적서를 확인하세요.\n📞 문의: 02-XXX-XXXX"
+        },
+        "검사종류": {
+            "text": "🔬 검사종류 안내\n\n다양한 검사 방법을 제공합니다.\n\n자세한 내용은 홈페이지를 참고하시거나 문의해주세요.\n\n🔗 www.biofl.co.kr\n📞 문의: 02-XXX-XXXX"
+        },
+        "검사안내": {
+            "text": "📋 검사안내\n\n검사 진행 절차 및 준비물 안내입니다.\n\n1. 시료 준비\n2. 의뢰서 작성\n3. 시료 접수\n4. 검사 진행\n5. 성적서 발급\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "사용키트": {
+            "text": "🧪 사용키트 안내\n\n검사에 사용되는 키트 정보입니다.\n\n자세한 내용은 홈페이지를 참고하세요.\n\n🔗 www.biofl.co.kr"
+        },
+        "RT-PCR": {
+            "text": "🧬 RT-PCR 검사\n\n분자생물학적 방법으로 알레르기 유발물질을 검출합니다.\n\n• 높은 민감도\n• DNA 기반 검출\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "Elisa": {
+            "text": "🔬 Elisa 검사\n\n면역학적 방법으로 알레르기 유발 단백질을 검출합니다.\n\n• 단백질 기반 검출\n• 정량 분석 가능\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "Free기준": {
+            "text": "📏 글루텐Free 기준\n\n• 국제기준: 20ppm 미만\n• 국내기준: 글루텐 불검출\n\n인증을 위해서는 기준 충족이 필요합니다.\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "키트": {
+            "text": "🧪 글루텐 검사 키트\n\n글루텐 검출을 위한 전용 키트를 사용합니다.\n\n자세한 내용은 문의해주세요.\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "금속류": {
+            "text": "🔩 금속류 이물검사\n\n식품 내 금속 이물질 검출 검사입니다.\n\n• 철, 스테인리스 등\n• X-ray 또는 금속탐지기 활용\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "고무/플라스틱": {
+            "text": "🧴 고무/플라스틱 이물검사\n\n식품 내 고무 및 플라스틱 이물질 분석입니다.\n\n• FT-IR 분석\n• 재질 동정\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "손톱": {
+            "text": "💅 손톱 이물검사\n\n이물질이 손톱인지 확인하는 검사입니다.\n\n• 현미경 분석\n• DNA 분석 가능\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "뼈": {
+            "text": "🦴 뼈 이물검사\n\n이물질이 동물 뼈인지 확인하는 검사입니다.\n\n• 종 판별 가능\n• DNA 분석\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "탄화물": {
+            "text": "⚫ 탄화물 이물검사\n\n탄화된 이물질 분석입니다.\n\n• 성분 분석\n• 원인 추정\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "원료의일부": {
+            "text": "🌾 원료의일부 확인\n\n이물질이 원료의 일부인지 확인합니다.\n\n• 성분 비교 분석\n• 원료 동정\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "모르겠음": {
+            "text": "❓ 이물질 종류 모름\n\n이물질의 종류를 모르실 경우, 검체를 보내주시면 분석해드립니다.\n\n• 종합 분석\n• 재질 동정\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "견적서": {
+            "text": "📄 견적서 안내\n\n홈페이지에서 온라인 견적서를 확인하실 수 있습니다.\n\n🔗 www.biofl.co.kr > 견적서"
+        },
+        "의뢰서작성": {
+            "text": "📝 의뢰서 작성\n\n검사 의뢰서는 홈페이지에서 작성 가능합니다.\n\n🔗 www.biofl.co.kr > 의뢰서 작성"
+        },
+        "할인쿠폰": {
+            "text": "🎫 할인쿠폰 안내\n\n다양한 할인 혜택을 제공합니다.\n\n홈페이지에서 쿠폰을 확인하세요.\n\n🔗 www.biofl.co.kr"
+        },
+        "외국어": {
+            "text": "🌍 외국어 성적서\n\n영문 성적서 발급이 가능합니다.\n\n• 영문 성적서\n• 기타 언어 문의\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "발급문의": {
+            "text": "📋 성적서 발급 문의\n\n성적서 발급 관련 문의사항은 아래로 연락주세요.\n\n📞 문의: 02-XXX-XXXX\n📧 이메일: info@biofl.co.kr"
+        },
+        "시료접수": {
+            "text": "📦 시료접수 안내\n\n시료 접수 방법:\n\n1. 홈페이지에서 의뢰서 작성\n2. 시료 포장\n3. 택배 또는 방문 접수\n\n📞 문의: 02-XXX-XXXX"
+        },
+        "방문수거": {
+            "text": "🚗 방문수거 서비스\n\n직접 방문하여 시료를 수거해드립니다.\n\n• 수도권 지역 가능\n• 사전 예약 필요\n\n📞 예약: 02-XXX-XXXX"
+        },
+        "오시는길": {
+            "text": "📍 오시는길\n\n바이오푸드랩\n\n주소: (상세 주소)\n\n🚇 지하철: OO역 O번 출구\n🚌 버스: OO번\n🚗 주차: 건물 내 주차장 이용\n\n📞 문의: 02-XXX-XXXX"
+        },
+    }
+}
+
+# 메뉴 계층 구조 정의 (자식 → 부모 매핑)
+# "이전" 버튼 클릭 시 돌아갈 부모 메뉴
+MENU_PARENT = {
+    # 1차 하위 메뉴 → 캐러셀 (검사분야)
+    "자가품질검사": "검사분야",
+    "영양성분검사": "검사분야",
+    "소비기한설정": "검사분야",
+    "항생물질": "검사분야",
+    "잔류농약": "검사분야",
+    "방사능": "검사분야",
+    "비건": "검사분야",
+    "할랄": "검사분야",
+    "동물DNA": "검사분야",
+    "알레르기": "검사분야",
+    "글루텐Free": "검사분야",
+    "이물질검사": "검사분야",
+    "홈페이지안내": "검사분야",
+    "성적서문의": "검사분야",
+    "시료접수안내": "검사분야",
+    # 2차 하위 메뉴 → 1차 하위 메뉴
+    "자가품질검사_식품": "자가품질검사",
+    "자가품질검사_축산": "자가품질검사",
+    "영양성분검사_검사종류": "영양성분검사",
+    "기타": "이물질검사",
+    "더보기": "기타",
+}
+
+
 def reset_user_state(user_id: str):
     """사용자 상태 초기화"""
-    user_state[user_id] = {}
+    user_state[user_id] = {"히스토리": []}
+
+
+def save_to_history(user_data: dict):
+    """현재 상태를 히스토리에 저장"""
+    if "히스토리" not in user_data:
+        user_data["히스토리"] = []
+
+    # 현재 상태 복사 (히스토리 제외)
+    current_state = {k: v for k, v in user_data.items() if k != "히스토리"}
+
+    # 빈 상태는 저장하지 않음
+    if current_state:
+        user_data["히스토리"].append(current_state.copy())
+
+
+def go_back(user_data: dict) -> dict:
+    """이전 상태로 복원하고 복원된 상태 반환"""
+    if "히스토리" not in user_data or not user_data["히스토리"]:
+        return None
+
+    # 마지막 히스토리 가져오기
+    previous_state = user_data["히스토리"].pop()
+
+    # 현재 상태 초기화 후 이전 상태 복원
+    history = user_data["히스토리"]
+    user_data.clear()
+    user_data["히스토리"] = history
+    user_data.update(previous_state)
+
+    return previous_state
 
 
 @app.route('/health', methods=['GET'])
@@ -117,8 +885,10 @@ def chatbot():
 
         # 사용자 상태 초기화
         if user_id not in user_state:
-            user_state[user_id] = {}
+            user_state[user_id] = {"히스토리": []}
         user_data = user_state[user_id]
+        if "히스토리" not in user_data:
+            user_data["히스토리"] = []
 
         # 기본 버튼
         default_buttons = ["검사주기", "검사항목", "처음으로"]
@@ -128,7 +898,335 @@ def chatbot():
             reset_user_state(user_id)
             return make_response(
                 "안녕하세요! 바이오푸드랩 챗봇[바푸]입니다.\n\n원하시는 서비스를 선택해주세요.",
-                ["검사주기", "검사항목"]
+                ["검사분야", "검사주기", "검사항목"]
+            )
+
+        # "이전" 버튼 처리
+        if user_input == "이전":
+            # 1. 검사분야 메뉴 계층에서 "이전" 처리
+            current_menu = user_data.get("현재메뉴")
+            if current_menu and current_menu in MENU_PARENT:
+                parent_menu = MENU_PARENT[current_menu]
+
+                if parent_menu == "검사분야":
+                    # 부모가 캐러셀이면 캐러셀 표시
+                    user_data.pop("현재메뉴", None)
+                    user_data.pop("검사분야_메뉴", None)
+                    user_data.pop("자가품질_분야", None)
+                    user_data.pop("영양성분_검사종류", None)
+                    return make_carousel_response(
+                        INSPECTION_MENU["cards"],
+                        quick_replies=["처음으로"]
+                    )
+                elif parent_menu in INSPECTION_MENU["submenus"]:
+                    # 부모가 하위 메뉴면 해당 메뉴 표시
+                    submenu = INSPECTION_MENU["submenus"][parent_menu]
+                    user_data["현재메뉴"] = parent_menu
+                    user_data["검사분야_메뉴"] = parent_menu
+                    # 하위 상태 정리
+                    user_data.pop("자가품질_분야", None)
+                    user_data.pop("영양성분_검사종류", None)
+                    return make_response(
+                        f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                        submenu["buttons"]
+                    )
+
+            # 2. 기존 히스토리 기반 "이전" 처리 (검사주기/검사항목 플로우)
+            previous = go_back(user_data)
+            if previous:
+                # 이전 상태에 따라 적절한 화면 표시
+                if previous.get("영양성분_검사종류"):
+                    submenu = INSPECTION_MENU["submenus"]["영양성분검사_검사종류"]
+                    user_data["현재메뉴"] = "영양성분검사_검사종류"
+                    return make_response(
+                        f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                        submenu["buttons"]
+                    )
+                elif previous.get("검사분야_메뉴"):
+                    menu_name = previous["검사분야_메뉴"]
+                    if menu_name in INSPECTION_MENU["submenus"]:
+                        submenu = INSPECTION_MENU["submenus"][menu_name]
+                        user_data["현재메뉴"] = menu_name
+                        return make_response(
+                            f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                            submenu["buttons"]
+                        )
+                elif previous.get("업종"):
+                    # 업종 선택 화면으로
+                    if previous.get("분야") == "식품":
+                        buttons = ["식품제조가공업", "즉석판매제조가공업", "이전", "처음으로"]
+                    else:
+                        buttons = ["축산물제조가공업", "축산물즉석판매제조가공업", "이전", "처음으로"]
+                    return make_response(
+                        f"[{previous.get('분야')}] 검사할 업종을 선택해주세요.",
+                        buttons
+                    )
+                elif previous.get("분야"):
+                    # 분야 선택 화면으로
+                    return make_response(
+                        f"[{previous.get('기능')}] 검사할 분야를 선택해주세요.",
+                        ["식품", "축산", "이전", "처음으로"]
+                    )
+                elif previous.get("기능"):
+                    # 기능 선택 화면으로
+                    return make_response(
+                        "원하시는 서비스를 선택해주세요.",
+                        ["검사분야", "검사주기", "검사항목"]
+                    )
+            # 히스토리가 없으면 처음으로
+            return make_response(
+                "안녕하세요! 바이오푸드랩 챗봇[바푸]입니다.\n\n원하시는 서비스를 선택해주세요.",
+                ["검사분야", "검사주기", "검사항목"]
+            )
+
+        # ===== 검사분야 카드 캐러셀 =====
+        if user_input == "검사분야":
+            reset_user_state(user_id)
+            return make_carousel_response(
+                INSPECTION_MENU["cards"],
+                quick_replies=["처음으로"]
+            )
+
+        # ===== 검사분야 하위 메뉴 처리 =====
+        if user_input in INSPECTION_MENU["submenus"]:
+            submenu = INSPECTION_MENU["submenus"][user_input]
+
+            # 현재 메뉴 저장 (이전 버튼용)
+            user_data["현재메뉴"] = user_input
+
+            # 자가품질검사에서 식품/축산 선택 시 상태 저장
+            if user_input == "자가품질검사":
+                user_data["검사분야_메뉴"] = "자가품질검사"
+
+            # 영양성분검사 메뉴 상태 저장
+            if user_input == "영양성분검사":
+                user_data["검사분야_메뉴"] = "영양성분검사"
+
+            # 일반 검사 메뉴 상태 저장 (항생물질, 잔류농약, 방사능, 비건, 할랄, 동물DNA 등)
+            if user_input in ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA",
+                             "알레르기", "글루텐Free", "이물질검사", "홈페이지안내",
+                             "성적서문의", "시료접수안내", "소비기한설정"]:
+                user_data["검사분야_메뉴"] = user_input
+
+            return make_response(
+                f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                submenu["buttons"]
+            )
+
+        # 자가품질검사 > 식품/축산 선택 시 분기 처리
+        if user_data.get("검사분야_메뉴") == "자가품질검사" and user_input in ["식품", "축산"]:
+            submenu_key = f"자가품질검사_{user_input}"
+            if submenu_key in INSPECTION_MENU["submenus"]:
+                submenu = INSPECTION_MENU["submenus"][submenu_key]
+                user_data["자가품질_분야"] = user_input
+                user_data["현재메뉴"] = submenu_key  # 현재 메뉴 저장
+                return make_response(
+                    f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                    submenu["buttons"]
+                )
+
+        # ===== 자가품질검사 > 식품/축산 > 검사주기/검사항목 선택 시 DB 조회 로직 연결 =====
+        if user_data.get("자가품질_분야") and user_input in ["검사주기", "검사항목"]:
+            # 자가품질검사 메뉴에서 온 경우 DB 조회 로직으로 연결
+            user_data["기능"] = user_input
+            user_data["분야"] = user_data["자가품질_분야"]
+            # 자가품질검사 상태 정리
+            user_data.pop("자가품질_분야", None)
+            user_data.pop("검사분야_메뉴", None)
+
+            if user_input == "검사주기":
+                # 검사주기: 업종 선택 필요
+                if user_data["분야"] == "식품":
+                    buttons = ["식품제조가공업", "즉석판매제조가공업", "처음으로"]
+                else:
+                    buttons = ["축산물제조가공업", "축산물즉석판매제조가공업", "처음으로"]
+                return make_response(
+                    f"[{user_data['분야']}] 검사할 업종을 선택해주세요.",
+                    buttons
+                )
+            else:
+                # 검사항목: 바로 식품 유형 입력
+                return make_response(
+                    f"[{user_data['분야']}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)",
+                    ["처음으로"]
+                )
+
+        # ===== 영양성분검사 > 검사종류 선택 시 하위 메뉴 표시 =====
+        if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input == "검사종류":
+            submenu = INSPECTION_MENU["submenus"]["영양성분검사_검사종류"]
+            user_data["영양성분_검사종류"] = True
+            user_data["현재메뉴"] = "영양성분검사_검사종류"  # 현재 메뉴 저장
+            return make_response(
+                f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                submenu["buttons"]
+            )
+
+        # ===== 영양성분검사 > 표시대상확인, 1회제공량산표 선택 시 DB 조회 =====
+        if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input in ["표시대상확인", "1회제공량산표"]:
+            # DB에서 크롤링된 데이터 조회
+            db_data = get_nutrition_info("영양성분검사", user_input)
+
+            # URL 가져오기
+            detail_url = URL_MAPPING.get("영양성분검사", {}).get(user_input)
+
+            if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        user_input,
+                        data_sections,
+                        ["이전", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📋 {user_input}\n\n{formatted_data}"
+            else:
+                response_text = f"📋 {user_input}\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
+
+            if detail_url:
+                return make_response_with_link(
+                    response_text,
+                    "🔗 자세히 보기",
+                    detail_url,
+                    ["이전", "처음으로"]
+                )
+            else:
+                return make_response(response_text, ["이전", "처음으로"])
+
+        # ===== 영양성분검사 > 검사종류 > 영양표시 종류 선택 시 DB 조회 =====
+        if user_data.get("영양성분_검사종류") and user_input == "영양표시 종류":
+            detail_url = URL_MAPPING.get("영양성분검사", {}).get("검사종류")
+
+            # DB에서 크롤링된 데이터 조회
+            db_data = get_nutrition_info("영양성분검사", "검사종류")
+
+            if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        "영양표시 종류",
+                        data_sections,
+                        ["이전", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📊 영양표시 종류\n\n{formatted_data}"
+            else:
+                response_text = "📊 영양표시 종류\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
+
+            if detail_url:
+                return make_response_with_link(
+                    response_text,
+                    "🔗 자세히 보기",
+                    detail_url,
+                    ["이전", "처음으로"]
+                )
+            else:
+                return make_response(response_text, ["이전", "처음으로"])
+
+        # ===== 영양성분검사 > 검사종류 > 9대/14대 영양성분 선택 시 =====
+        if user_data.get("영양성분_검사종류") and user_input in ["9대 영양성분", "14대 영양성분"]:
+            url_key = user_input.replace(" ", "")  # "9대영양성분" 또는 "14대영양성분"
+            detail_url = URL_MAPPING.get("영양성분검사", {}).get(url_key)
+
+            # DB에서 크롤링된 데이터 조회
+            db_data = get_nutrition_info("영양성분검사", url_key)
+
+            if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        user_input,
+                        data_sections,
+                        ["이전", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
+                # 9대/14대 영양성분 전용 포맷 적용
+                formatted_data = format_nutrition_component_data(db_data['details'])
+                response_text = f"📊 {user_input}\n\n{formatted_data}"
+            else:
+                response_text = f"📊 {user_input}\n\n자세한 내용은 아래 링크를 확인해주세요."
+
+            if detail_url:
+                return make_response_with_link(
+                    response_text,
+                    "🔗 자세히 보기",
+                    detail_url,
+                    ["이전", "처음으로"]
+                )
+            else:
+                return make_response(response_text, ["이전", "처음으로"])
+
+        # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 DB 조회 =====
+        general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA", "알레르기", "글루텐Free", "소비기한설정", "자가품질검사"]
+        current_menu = user_data.get("검사분야_메뉴")
+
+        # 메뉴별 처리 가능한 하위 항목
+        menu_items_map = {
+            "항생물질": ["검사종류"],
+            "잔류농약": ["검사종류"],
+            "방사능": ["검사안내"],
+            "비건": ["검사안내"],
+            "할랄": ["검사안내"],
+            "동물DNA": ["검사안내"],
+            "알레르기": ["검사종류", "RT-PCR", "Elisa"],
+            "글루텐Free": ["Free기준"],
+            "소비기한설정": ["가속실험", "실측실험"],
+            "자가품질검사": ["검사주기알림"]
+        }
+
+        allowed_items = menu_items_map.get(current_menu, [])
+        if current_menu in general_menus and user_input in allowed_items:
+            # DB에서 크롤링된 데이터 조회
+            db_data = get_nutrition_info(current_menu, user_input)
+
+            # URL 가져오기
+            detail_url = URL_MAPPING.get(current_menu, {}).get(user_input)
+
+            if db_data and db_data.get("details"):
+                # 데이터에 링크가 포함되어 있는지 확인
+                if has_links_in_data(db_data['details']):
+                    # 링크가 있으면 캐러셀로 표시
+                    data_sections = parse_data_with_links(db_data['details'])
+                    carousel_response = make_carousel_with_links_response(
+                        f"{current_menu} - {user_input}",
+                        data_sections,
+                        ["이전", "처음으로"]
+                    )
+                    if carousel_response:
+                        return carousel_response
+
+                # 링크가 없거나 캐러셀 생성 실패 시 일반 텍스트로 표시
+                formatted_data = format_crawled_data(db_data['details'])
+                response_text = f"📋 {current_menu} - {user_input}\n\n{formatted_data}"
+            else:
+                response_text = f"📋 {current_menu} - {user_input}\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
+
+            if detail_url:
+                return make_response_with_link(
+                    response_text,
+                    "🔗 자세히 보기",
+                    detail_url,
+                    ["이전", "처음으로"]
+                )
+            else:
+                return make_response(response_text, ["이전", "처음으로"])
+
+        # ===== 검사분야 말단 메뉴 응답 =====
+        if user_input in INSPECTION_MENU["responses"]:
+            response_data = INSPECTION_MENU["responses"][user_input]
+            return make_response(
+                response_data["text"],
+                ["이전", "처음으로"]
             )
 
         # ===== 이미지 업로드 처리 =====
@@ -145,8 +1243,9 @@ def chatbot():
                     result = get_inspection_item(user_data["분야"], food_type)
                     if result:
                         user_data["실패횟수"] = 0
+                        formatted_items = format_items_list(result['items'])
                         response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
-                        response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                        response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                         response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                         return make_response(response_text, ["종료"])
                     else:
@@ -162,8 +1261,10 @@ def chatbot():
                     result = get_inspection_cycle(user_data["분야"], user_data["업종"], food_type)
                     if result:
                         user_data["실패횟수"] = 0
+                        formatted_cycle = format_korean_spacing(result['cycle'])
+                        formatted_food_type = format_korean_spacing(result['food_type'])
                         response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
-                        response_text += f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                        response_text += f"✅ [{result['food_group']}] {formatted_food_type}의 검사주기:\n\n{formatted_cycle}"
                         response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                         return make_response(response_text, ["종료"])
                     else:
@@ -252,12 +1353,13 @@ def chatbot():
 
         # Step 1: 기능 선택
         if user_input in ["검사주기", "검사항목"]:
+            save_to_history(user_data)  # 히스토리 저장
             user_data["기능"] = user_input
             user_data.pop("분야", None)
             user_data.pop("업종", None)
             return make_response(
                 f"[{user_input}] 검사할 분야를 선택해주세요.",
-                ["식품", "축산", "처음으로"]
+                ["식품", "축산", "이전", "처음으로"]
             )
 
         # Step 2: 분야 선택
@@ -268,14 +1370,15 @@ def chatbot():
                     ["검사주기", "검사항목"]
                 )
 
+            save_to_history(user_data)  # 히스토리 저장
             user_data["분야"] = user_input
 
             if user_data["기능"] == "검사주기":
                 # 검사주기: 업종 선택 필요
                 if user_input == "식품":
-                    buttons = ["식품제조가공업", "즉석판매제조가공업", "처음으로"]
+                    buttons = ["식품제조가공업", "즉석판매제조가공업", "이전", "처음으로"]
                 else:
-                    buttons = ["축산물제조가공업", "축산물즉석판매제조가공업", "처음으로"]
+                    buttons = ["축산물제조가공업", "축산물즉석판매제조가공업", "이전", "처음으로"]
                 return make_response(
                     f"[{user_input}] 검사할 업종을 선택해주세요.",
                     buttons
@@ -283,8 +1386,8 @@ def chatbot():
             else:
                 # 검사항목: 바로 식품 유형 입력
                 return make_response(
-                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n📷 품목제조보고서 이미지를 보내주시면 자동으로 식품유형을 추출합니다.",
-                    ["처음으로"]
+                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)",
+                    ["이전", "처음으로"]
                 )
 
         # Step 3: 업종 선택 (검사주기만 해당)
@@ -295,11 +1398,40 @@ def chatbot():
                     ["검사주기", "검사항목"]
                 )
 
+            save_to_history(user_data)  # 히스토리 저장
             user_data["업종"] = user_input
-            return make_response(
-                f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n📷 품목제조보고서 이미지를 보내주시면 자동으로 식품유형을 추출합니다.",
-                ["처음으로"]
-            )
+
+            # 식품제조가공업, 축산물제조가공업은 품목제조보고서 주의 메시지
+            if user_input in ["식품제조가공업", "축산물제조가공업"]:
+                return make_response(
+                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)",
+                    ["이전", "처음으로"]
+                )
+            elif user_input == "즉석판매제조가공업":
+                # 즉석판매제조가공업은 영업신고증 주의 메시지 + 바로가기 버튼
+                message = f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n"
+                message += "예: 과자, 음료, 소시지 등\n\n"
+                message += "(주의 : 영업신고증에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요.)\n\n"
+                message += "* 주의 즉석판매제조가공업은 영업등록증에 표기된 식품의 유형만 자가품질검사 대상이 됩니다.\n\n"
+                message += "대상은 바로가기 버튼을 클릭하여 Q5. [즉석판매제조가공업] 자가품질검사 대상식품 및 검사주기를 참고해주세요."
+                return make_response_with_link(
+                    message,
+                    "바로가기",
+                    "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94",
+                    ["이전", "처음으로"]
+                )
+            else:
+                # 축산물즉석판매제조가공업은 신고필증 주의 메시지 + 바로가기 버튼
+                message = f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n"
+                message += "예: 과자, 음료, 소시지 등\n\n"
+                message += "(주의 : 신고필증에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요.)\n\n"
+                message += "* 주의 축산물즉석판매제조가공업은 신고필증에 표기된 식품의 유형을 확인해주시고 바로가기 버튼을 클릭하여 \"Q5. [식육즉석판매가공업] 자가품질검사 대상식품 및 검사주기\"를 참고해 주세요."
+                return make_response_with_link(
+                    message,
+                    "바로가기",
+                    "https://www.biofl.co.kr/sub.jsp?code=XN0Cd4r7",
+                    ["이전", "처음으로"]
+                )
 
         # Step 4: 식품 유형 입력 → 결과 조회
         if user_data.get("기능") and user_data.get("분야"):
@@ -324,7 +1456,8 @@ def chatbot():
                     # 1개 매칭 시 바로 결과 표시
                     result = all_matches[0]
                     user_data["실패횟수"] = 0
-                    response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{result['items']}"
+                    formatted_items = format_items_list(result['items'])
+                    response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
@@ -347,7 +1480,9 @@ def chatbot():
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text = f"❌ '{food_type}'에 대한 검사 항목을 찾을 수 없습니다.\n\n"
+                        response_text += "☆ 식품 유형을 1회 잘못 입력하셨습니다.\n\n"
+                        response_text += "품목제조보고서의 \"식품의 유형\"을 확인하여 다시 한번 입력하거나, [종료]를 눌러주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
@@ -372,7 +1507,9 @@ def chatbot():
                     # 1개 매칭 시 바로 결과 표시
                     result = all_matches[0]
                     user_data["실패횟수"] = 0
-                    response_text = f"✅ [{result['food_group']}] {result['food_type']}의 검사주기:\n\n{result['cycle']}"
+                    formatted_cycle = format_korean_spacing(result['cycle'])
+                    formatted_food_type = format_korean_spacing(result['food_type'])
+                    response_text = f"✅ [{result['food_group']}] {formatted_food_type}의 검사주기:\n\n{formatted_cycle}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
                 else:
@@ -401,7 +1538,9 @@ def chatbot():
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
                     else:
-                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n☆ 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
+                        response_text = f"❌ '{food_type}'에 대한 검사주기를 찾을 수 없습니다.\n\n"
+                        response_text += "☆ 식품 유형을 1회 잘못 입력하셨습니다.\n\n"
+                        response_text += "품목제조보고서의 \"식품의 유형\"을 확인하여 다시 한번 입력하거나, [종료]를 눌러주세요."
                         if similar:
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
@@ -410,7 +1549,7 @@ def chatbot():
         # 기본 응답
         return make_response(
             "안녕하세요! 바이오푸드랩 챗봇 [바푸]입니다.\n\n원하시는 서비스를 선택해주세요.",
-            ["검사주기", "검사항목"]
+            ["검사분야", "검사주기", "검사항목"]
         )
 
     except Exception as e:
