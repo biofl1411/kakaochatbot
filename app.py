@@ -1050,7 +1050,7 @@ def chatbot():
                     carousel_response = make_carousel_with_links_response(
                         user_input,
                         data_sections,
-                        ["영양성분검사", "검사분야", "처음으로"]
+                        ["이전", "처음으로"]
                     )
                     if carousel_response:
                         return carousel_response
@@ -1065,10 +1065,10 @@ def chatbot():
                     response_text,
                     "🔗 자세히 보기",
                     detail_url,
-                    ["영양성분검사", "검사분야", "처음으로"]
+                    ["이전", "처음으로"]
                 )
             else:
-                return make_response(response_text, ["영양성분검사", "검사분야", "처음으로"])
+                return make_response(response_text, ["이전", "처음으로"])
 
         # ===== 영양성분검사 > 검사종류 > 영양표시 종류 선택 시 DB 조회 =====
         if user_data.get("영양성분_검사종류") and user_input == "영양표시 종류":
@@ -1099,10 +1099,10 @@ def chatbot():
                     response_text,
                     "🔗 자세히 보기",
                     detail_url,
-                    ["검사종류", "영양성분검사", "처음으로"]
+                    ["이전", "처음으로"]
                 )
             else:
-                return make_response(response_text, ["검사종류", "영양성분검사", "처음으로"])
+                return make_response(response_text, ["이전", "처음으로"])
 
         # ===== 영양성분검사 > 검사종류 > 9대/14대 영양성분 선택 시 =====
         if user_data.get("영양성분_검사종류") and user_input in ["9대 영양성분", "14대 영양성분"]:
@@ -1119,7 +1119,7 @@ def chatbot():
                     carousel_response = make_carousel_with_links_response(
                         user_input,
                         data_sections,
-                        ["검사종류", "영양성분검사", "처음으로"]
+                        ["이전", "처음으로"]
                     )
                     if carousel_response:
                         return carousel_response
@@ -1135,10 +1135,10 @@ def chatbot():
                     response_text,
                     "🔗 자세히 보기",
                     detail_url,
-                    ["검사종류", "영양성분검사", "처음으로"]
+                    ["이전", "처음으로"]
                 )
             else:
-                return make_response(response_text, ["검사종류", "영양성분검사", "처음으로"])
+                return make_response(response_text, ["이전", "처음으로"])
 
         # ===== 일반 검사 메뉴 > 검사종류/검사안내 선택 시 DB 조회 =====
         general_menus = ["항생물질", "잔류농약", "방사능", "비건", "할랄", "동물DNA", "알레르기", "글루텐Free", "소비기한설정", "자가품질검사"]
@@ -1174,7 +1174,7 @@ def chatbot():
                     carousel_response = make_carousel_with_links_response(
                         f"{current_menu} - {user_input}",
                         data_sections,
-                        [current_menu, "검사분야", "처음으로"]
+                        ["이전", "처음으로"]
                     )
                     if carousel_response:
                         return carousel_response
@@ -1190,10 +1190,10 @@ def chatbot():
                     response_text,
                     "🔗 자세히 보기",
                     detail_url,
-                    [current_menu, "검사분야", "처음으로"]
+                    ["이전", "처음으로"]
                 )
             else:
-                return make_response(response_text, [current_menu, "검사분야", "처음으로"])
+                return make_response(response_text, ["이전", "처음으로"])
 
         # ===== 자가품질검사 > 검사주기알림 =====
         if user_input == "검사주기알림" and user_data.get("검사분야_메뉴") == "자가품질검사":
@@ -1218,7 +1218,7 @@ def chatbot():
                 response_text,
                 "🔗 자세히 보기",
                 "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198",
-                ["자가품질검사", "이전", "처음으로"]
+                ["이전", "처음으로"]
             )
 
         # ===== 검사분야 말단 메뉴 응답 =====
@@ -1226,7 +1226,7 @@ def chatbot():
             response_data = INSPECTION_MENU["responses"][user_input]
             return make_response(
                 response_data["text"],
-                ["검사분야", "처음으로"]
+                ["이전", "처음으로"]
             )
 
         # ===== 이미지 업로드 처리 =====
