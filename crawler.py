@@ -388,33 +388,77 @@ class Crawler:
         text = re.sub(r'자세히\s*보기', '', text)
         text = re.sub(r'\bClose\b', '', text)
 
-        # 문장 단위로 분리 (마침표, 물음표, 느낌표, 다. 등으로 끝나는 문장)
-        sentences = re.split(r'(?<=[다요음됩니까]\.)\s*', text)
+        # 공백 정리
+        text = re.sub(r'\s+', ' ', text).strip()
 
         result = []
-        for sent in sentences:
-            sent = sent.strip()
-            sent = re.sub(r'\s+', ' ', sent)
-            if sent and len(sent) > 5:
-                # - 로 시작하는 항목
-                if sent.startswith('-'):
-                    result.append(f"\n• {sent[1:].strip()}")
-                # ※ 로 시작하는 주의사항
-                elif sent.startswith('※'):
-                    result.append(f"\n⚠️ {sent}")
-                # 관련 법령
-                elif sent.startswith('관련 법령'):
-                    result.append(f"\n\n📋 {sent}")
-                # 예) 로 시작하는 예시
-                elif sent.startswith('예)'):
-                    result.append(f"\n💡 {sent}")
-                else:
-                    result.append(f"\n{sent}")
+
+        # 주요 섹션 분리
+        # 1. ※ 주의사항 분리
+        parts = re.split(r'(※[^※관련]*)', text)
+
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            # ※ 주의사항
+            if part.startswith('※'):
+                result.append(f"\n\n⚠️ 주의사항")
+                result.append(f"  {part}")
+                continue
+
+            # 관련 법령 자료 분리
+            if '관련 법령' in part:
+                legal_split = re.split(r'(관련 법령[^:]*:[^\.]+\.)', part)
+                for legal_part in legal_split:
+                    legal_part = legal_part.strip()
+                    if not legal_part:
+                        continue
+                    if legal_part.startswith('관련 법령'):
+                        result.append(f"\n\n📋 관련 법령")
+                        # 법령 내용 정리
+                        legal_content = legal_part.replace('관련 법령 자료 :', '').strip()
+                        result.append(f"  {legal_content}")
+                    else:
+                        # 일반 문장 처리
+                        self._format_general_sentences(legal_part, result)
+            else:
+                self._format_general_sentences(part, result)
 
         formatted = '\n'.join(result).strip()
         # 연속된 줄바꿈 정리 (3개 이상 -> 2개)
         formatted = re.sub(r'\n{3,}', '\n\n', formatted)
         return formatted
+
+    def _format_general_sentences(self, text: str, result: list):
+        """일반 문장들을 포맷팅하여 result 리스트에 추가"""
+        # 문장 단위로 분리
+        sentences = re.split(r'(?<=[다요음됩니다]\.)\s*', text)
+
+        for sent in sentences:
+            sent = sent.strip()
+            if not sent or len(sent) < 5:
+                continue
+
+            # - 로 시작하는 항목
+            if sent.startswith('-'):
+                result.append(f"\n• {sent[1:].strip()}")
+            # 번호로 시작하는 항목 (예: 3. 자가품질검사...)
+            elif re.match(r'^\d+\.\s', sent):
+                result.append(f"\n\n📌 {sent}")
+            # 다만, 으로 시작하는 단서 조항
+            elif sent.startswith('다만,'):
+                result.append(f"\n  └ {sent}")
+            # 예) 로 시작하는 예시
+            elif sent.startswith('예)'):
+                result.append(f"\n💡 {sent}")
+            else:
+                # 일반 문장 - 첫 문장이면 bullet point 추가
+                if not result or result[-1].startswith('\n\n'):
+                    result.append(f"\n• {sent}")
+                else:
+                    result.append(f"\n• {sent}")
 
     def _extract_section_text(self, text: str, section_filter: str) -> str:
         """텍스트에서 특정 섹션만 추출 (소비기한설정 등)"""
