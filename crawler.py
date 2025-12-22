@@ -526,6 +526,108 @@ class Crawler:
         logger.info(f"포맷팅된 결과 길이: {len(result)}")
         return result
 
+    def _extract_allergy_kit_section(self, text: str, section_filter: str) -> str:
+        """알레르기 키트 섹션 추출 (ELISA Kit 또는 RT-PCR Kit)"""
+        if not text or not section_filter:
+            return ""
+
+        logger.info(f"알레르기 섹션 필터 적용: {section_filter}")
+
+        # "Close" 등 버튼 텍스트 제거
+        text = re.sub(r'\bClose\b', '', text)
+        # Q 제목 제거
+        text = re.sub(r'Q\d+\.[^Q]*?(?=ELISA|RT-PCR)', '', text, count=1)
+
+        # 섹션 시작 위치 찾기
+        start_match = re.search(rf'{re.escape(section_filter)}', text, re.IGNORECASE)
+        if not start_match:
+            logger.warning(f"알레르기 섹션을 찾을 수 없음: {section_filter}")
+            return ""
+
+        section_start = start_match.start()
+
+        # 다음 섹션 찾기 (ELISA Kit 다음에 RT-PCR Kit, 또는 RT-PCR Kit이면 끝까지)
+        if "ELISA" in section_filter.upper():
+            # ELISA Kit 섹션 -> RT-PCR Kit까지
+            next_match = re.search(r'RT-PCR\s*Kit', text[section_start + len(section_filter):], re.IGNORECASE)
+            if next_match:
+                section_end = section_start + len(section_filter) + next_match.start()
+            else:
+                section_end = len(text)
+        else:
+            # RT-PCR Kit 섹션 -> 끝까지
+            section_end = len(text)
+
+        section_text = text[section_start:section_end].strip()
+        logger.info(f"추출된 알레르기 섹션 텍스트 길이: {len(section_text)}")
+
+        if not section_text:
+            return ""
+
+        lines = []
+
+        # 섹션 제목
+        if "ELISA" in section_filter.upper():
+            lines.append("🧪 ELISA Kit")
+        else:
+            lines.append("🧪 RT-PCR Kit")
+        lines.append("")
+
+        # 보유 Kit 추출
+        kit_match = re.search(r'-\s*보유\s*[Kk]it\s*[:：]?\s*([^-]+?)(?=-\s*(?:별도|입고)|$)', section_text, re.DOTALL)
+        if kit_match:
+            kit_items = kit_match.group(1).strip()
+            # 공백 정리
+            kit_items = re.sub(r'\s+', ' ', kit_items)
+            lines.append("📌 보유 Kit")
+            lines.append(f"  {kit_items}")
+            lines.append("")
+
+        # 별도 문의 추출
+        inquiry_match = re.search(r'-\s*별도\s*문의\s*[:：]?\s*([^-*]+?)(?=-|\*|$)', section_text, re.DOTALL)
+        if inquiry_match:
+            inquiry_items = inquiry_match.group(1).strip()
+            inquiry_items = re.sub(r'\s+', ' ', inquiry_items)
+            lines.append("📌 별도 문의")
+            lines.append(f"  {inquiry_items}")
+            lines.append("")
+
+        # 입고 예정 추출
+        incoming_match = re.search(r'-\s*입고\s*예정\s*[:：]?\s*([^-\[*]+?)(?=-|\[|\*|$)', section_text, re.DOTALL)
+        if incoming_match:
+            incoming_items = incoming_match.group(1).strip()
+            incoming_items = re.sub(r'\s+', ' ', incoming_items)
+            lines.append("📌 입고 예정")
+            lines.append(f"  {incoming_items}")
+            lines.append("")
+
+        # 검출 가능 종 안내 (RT-PCR에만 있음)
+        detect_match = re.search(r'\[검출\s*가능\s*종\s*안내\](.+?)(?=\*고객지원|$)', section_text, re.DOTALL)
+        if detect_match:
+            detect_content = detect_match.group(1).strip()
+            lines.append("📌 검출 가능 종 안내")
+
+            # 각 종별로 분리 (1) 오징어, 2) 게, 3) 새우)
+            species_pattern = r'(\d+\))\s*([가-힣]+)\s*[:：]?\s*([^0-9]+?)(?=\d+\)|$)'
+            species_matches = re.findall(species_pattern, detect_content)
+            for num, name, detail in species_matches:
+                detail = re.sub(r'\s+', ' ', detail).strip()
+                if detail:
+                    lines.append(f"  {num} {name}: {detail}")
+            lines.append("")
+
+        # * 안내사항 추출
+        note_match = re.search(r'\*\s*(?:별도\s*문의하신|고객지원)[^*]+', section_text)
+        if note_match:
+            note = note_match.group(0).strip()
+            note = re.sub(r'\s+', ' ', note)
+            lines.append("⚠️ 안내사항")
+            lines.append(f"  {note}")
+
+        result = '\n'.join(lines)
+        logger.info(f"포맷팅된 알레르기 결과 길이: {len(result)}")
+        return result
+
     def _extract_items_from_text(self, text: str, category: str = None, section_filter: str = None) -> str:
         """텍스트에서 항목들을 추출하여 포맷팅"""
         if not text:
@@ -538,6 +640,10 @@ class Crawler:
         # 소비기한설정은 섹션 필터 적용
         if category == "소비기한설정" and section_filter:
             return self._extract_section_text(text, section_filter)
+
+        # 알레르기는 키트 섹션 필터 적용
+        if category == "알레르기" and section_filter:
+            return self._extract_allergy_kit_section(text, section_filter)
 
         # 제목 제거 (Q로 시작하는 질문 제목 전체)
         # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
