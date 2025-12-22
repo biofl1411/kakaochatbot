@@ -389,7 +389,6 @@ class Crawler:
         text = re.sub(r'\bClose\b', '', text)
 
         # 문장 단위로 분리 (마침표, 물음표, 느낌표, 다. 등으로 끝나는 문장)
-        # 한글 문장 끝 패턴
         sentences = re.split(r'(?<=[다요음됩니까]\.)\s*', text)
 
         result = []
@@ -397,15 +396,25 @@ class Crawler:
             sent = sent.strip()
             sent = re.sub(r'\s+', ' ', sent)
             if sent and len(sent) > 5:
-                # - 또는 ※ 로 시작하는 항목은 별도 줄로
-                if sent.startswith('-') or sent.startswith('※'):
-                    result.append(f"\n{sent}")
+                # - 로 시작하는 항목
+                if sent.startswith('-'):
+                    result.append(f"\n• {sent[1:].strip()}")
+                # ※ 로 시작하는 주의사항
+                elif sent.startswith('※'):
+                    result.append(f"\n⚠️ {sent}")
+                # 관련 법령
                 elif sent.startswith('관련 법령'):
-                    result.append(f"\n📋 {sent}")
+                    result.append(f"\n\n📋 {sent}")
+                # 예) 로 시작하는 예시
+                elif sent.startswith('예)'):
+                    result.append(f"\n💡 {sent}")
                 else:
-                    result.append(sent)
+                    result.append(f"\n{sent}")
 
-        return '\n'.join(result) if result else text
+        formatted = '\n'.join(result).strip()
+        # 연속된 줄바꿈 정리 (3개 이상 -> 2개)
+        formatted = re.sub(r'\n{3,}', '\n\n', formatted)
+        return formatted
 
     def _extract_section_text(self, text: str, section_filter: str) -> str:
         """텍스트에서 특정 섹션만 추출 (소비기한설정 등)"""
@@ -419,7 +428,6 @@ class Crawler:
         text = re.sub(r'\bClose\b', '', text)
 
         # 섹션 패턴 찾기 (예: "1) 실측실험" 또는 "2) 가속실험")
-        # 해당 섹션부터 다음 섹션 또는 끝까지 추출
         section_pattern = rf'({re.escape(section_filter)}[^)]*\)?\s*[^\d]*?)(?=\d\)\s|\Z)'
         match = re.search(section_pattern, text, re.DOTALL)
 
@@ -427,21 +435,23 @@ class Crawler:
             section_text = match.group(1).strip()
             # 줄바꿈 정리
             section_text = re.sub(r'\s+', ' ', section_text)
-            # 문장별로 정리
             lines = []
-            # 제목 추출
+
+            # 제목 추출 (예: "1) 실측실험 (3개월이내 제품)")
             title_match = re.match(r'(\d\)\s*[^\(]+\([^)]+\))', section_text)
             if title_match:
-                lines.append(f"📋 {title_match.group(1)}\n")
+                lines.append(f"📋 {title_match.group(1)}")
+                lines.append("")  # 제목 후 빈 줄
                 section_text = section_text[title_match.end():]
 
-            # 나머지 내용 정리
+            # 나머지 내용을 문장별로 정리
             sentences = re.split(r'(?<=[다요]\.)\s*', section_text)
             for sent in sentences:
                 sent = sent.strip()
                 if sent and len(sent) > 3:
                     if sent.startswith('예)'):
-                        lines.append(f"\n💡 {sent}")
+                        lines.append(f"\n💡 예시")
+                        lines.append(f"  {sent[2:].strip()}")
                     else:
                         lines.append(f"• {sent}")
 
@@ -476,49 +486,51 @@ class Crawler:
         kits = re.findall(kit_pattern, text, re.IGNORECASE)
 
         if kits:
-            result.append("[검사 키트]")
+            result.append("🧪 검사 키트")
+            result.append("")
             for kit in kits:
                 kit = kit.strip()
-                # 괄호 안 내용 정리
                 kit = re.sub(r'\s+', ' ', kit)
                 if kit and len(kit) > 5:
-                    result.append(f"  • {kit}")
+                    result.append(f"• {kit}")
 
         # 필요한 시료량 추출
         sample_match = re.search(r'(필요한\s*시료량?[^*]*)', text)
         if sample_match:
             sample_info = sample_match.group(1).strip()
             sample_info = re.sub(r'\s+', ' ', sample_info)
-            result.append(f"\n[시료량]\n  • {sample_info}")
+            result.append(f"\n📦 시료량")
+            result.append(f"• {sample_info}")
 
         # "-" 로 시작하는 항목 추출 (예: - 항생물질 28종)
         dash_items = re.findall(r'-\s*([^-*\n]+?)(?=\s*-|\s*\*|$)', text)
         if dash_items:
-            result.append("[검사항목]")
+            result.append("\n📋 검사항목")
+            result.append("")
             for item in dash_items:
                 item = item.strip()
                 item = re.sub(r'\s+', ' ', item)
                 if item and len(item) > 2:
-                    result.append(f"  • {item}")
+                    result.append(f"• {item}")
 
         # * 로 시작하는 참고 사항 추출
         notes = re.findall(r'\*\s*([^*]+)', text)
         if notes:
-            result.append("\n[참고사항]")
+            result.append("\n⚠️ 참고사항")
+            result.append("")
             for note in notes:
                 note = note.strip()
                 note = re.sub(r'\s+', ' ', note)
                 if note and len(note) > 3:
-                    result.append(f"  • {note}")
+                    result.append(f"• {note}")
 
         # 결과가 없으면 원본 텍스트 정리해서 반환
         if not result:
-            # 하이픈으로 항목 분리
             items = re.split(r'[-•]\s*', text)
             for item in items:
                 item = re.sub(r'\s+', ' ', item).strip()
                 if item and len(item) > 3:
-                    result.append(f"  • {item}")
+                    result.append(f"• {item}")
 
         return "\n".join(result) if result else text
 
