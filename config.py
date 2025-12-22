@@ -60,7 +60,7 @@ URL_MAPPING = {
         "검사안내": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_127"
     },
     "알레르기": {
-        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_26",
+        "분석종류": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_26",
         "RT-PCR": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_151",
         "Elisa": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_151"
     },
@@ -118,7 +118,7 @@ GENERAL_POPUP_MAPPING = {
         "검사안내": "question_127"
     },
     "알레르기": {
-        "검사종류": "question_26",
+        "분석종류": "question_26",
         "RT-PCR": "question_151",
         "Elisa": "question_151"
     },
