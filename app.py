@@ -147,6 +147,8 @@ def format_items_list(items_text: str) -> str:
     # 항목 중간에 카테고리가 있는 경우: 보존료(카테고리) 아질산이온
     # 괄호 뒤에 내용이 있으면 카테고리 헤더로 판단
     embedded_category_pattern = re.compile(r'^([^(]+)(\([^)]+\))\s+(.+)$')
+    # 항목(괄호) 형태로 끝나는 경우: 보존료(카테고리) - 괄호가 '한함' 또는 '제외'로 끝나지 않으면 카테고리
+    item_trailing_paren_pattern = re.compile(r'^([^(]+)(\([^)]+\))$')
 
     # 각 항목에 띄어쓰기 추가 후 포맷팅
     formatted_items = []
@@ -214,6 +216,23 @@ def format_items_list(items_text: str) -> str:
             # 새 카테고리의 첫 항목
             if after_item:
                 formatted_items.append(f"• {after_item}")
+        # 항목(괄호)로 끝나는 경우 - 괄호가 카테고리인지 설명인지 판단
+        elif item_trailing_paren_pattern.match(formatted_item):
+            match = item_trailing_paren_pattern.match(formatted_item)
+            item_text = match.group(1).strip()
+            paren_content = match.group(2)
+            # '한함)' 또는 '제외)'로 끝나면 설명 (분리 안함)
+            is_note = paren_content.endswith('한함)') or paren_content.endswith('제외)')
+            if is_note:
+                # 설명이면 전체를 하나의 항목으로
+                formatted_items.append(f"• {formatted_item}")
+            else:
+                # 카테고리면 분리
+                if item_text:
+                    formatted_items.append(f"• {item_text}")
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {paren_content}")
         else:
             formatted_items.append(f"• {formatted_item}")
 
