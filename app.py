@@ -139,9 +139,14 @@ def format_items_list(items_text: str) -> str:
     # 예: (매월 1회 이상), (제품 생산 단위별), (비살균 제품) 등
     category_only_pattern = re.compile(r'^\([^)]+\)$')  # 카테고리만 있는 경우
     category_with_item_pattern = re.compile(r'^(\([^)]+\))\s*(.+)$')  # 카테고리+항목 붙은 경우
+    # 항목(설명)(카테고리) 다음항목 형태: 탄화물(분말 제품에 한함)(제품 생산 단위별) 세균수
+    item_note_category_next_pattern = re.compile(r'^([^(]+\([^)]+\))(\([^)]+\))\s+(.+)$')
+    # 항목 끝에 연속 괄호 2개: 탄화물(분말 제품에 한함)(제품 생산 단위별)
+    # 마지막 괄호가 카테고리, 그 앞은 항목+설명
+    double_paren_ending_pattern = re.compile(r'^(.+\))(\([^)]+\))$')
     # 항목 중간에 카테고리가 있는 경우: 보존료(카테고리) 아질산이온
     # 괄호 뒤에 내용이 있으면 카테고리 헤더로 판단
-    embedded_category_pattern = re.compile(r'^([^(]+)(\([^)]+\))\s*(.+)$')
+    embedded_category_pattern = re.compile(r'^([^(]+)(\([^)]+\))\s+(.+)$')
 
     # 각 항목에 띄어쓰기 추가 후 포맷팅
     formatted_items = []
@@ -165,6 +170,34 @@ def format_items_list(items_text: str) -> str:
             # 항목 추가
             if item_text:
                 formatted_items.append(f"• {item_text}")
+        # 항목(설명)(카테고리) 다음항목 형태 (예: "탄화물(분말 제품에 한함)(제품 생산 단위별) 세균수")
+        elif item_note_category_next_pattern.match(formatted_item):
+            match = item_note_category_next_pattern.match(formatted_item)
+            item_with_note = match.group(1).strip()
+            category_header = match.group(2)
+            next_item = match.group(3).strip()
+            # 이전 카테고리의 마지막 항목
+            if item_with_note:
+                formatted_items.append(f"• {item_with_note}")
+            # 새 카테고리 헤더
+            if formatted_items:
+                formatted_items.append("")
+            formatted_items.append(f"✏️ {category_header}")
+            # 새 카테고리의 첫 항목
+            if next_item:
+                formatted_items.append(f"• {next_item}")
+        # 항목 끝에 연속 괄호 2개 (예: "탄화물(설명)(카테고리)")
+        elif double_paren_ending_pattern.match(formatted_item):
+            match = double_paren_ending_pattern.match(formatted_item)
+            item_with_note = match.group(1).strip()
+            category_header = match.group(2)
+            # 이전 카테고리의 마지막 항목
+            if item_with_note:
+                formatted_items.append(f"• {item_with_note}")
+            # 새 카테고리 헤더
+            if formatted_items:
+                formatted_items.append("")
+            formatted_items.append(f"✏️ {category_header}")
         # 항목 중간에 카테고리가 있는 경우 (예: "보존료(카테고리) 아질산이온")
         elif embedded_category_pattern.match(formatted_item):
             match = embedded_category_pattern.match(formatted_item)
