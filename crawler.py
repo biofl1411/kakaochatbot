@@ -769,9 +769,9 @@ class Crawler:
         if category == "소비기한설정" and section_filter:
             return self._extract_section_text(text, section_filter)
 
-        # 알레르기는 키트 섹션 필터 적용
-        if category == "알레르기" and section_filter:
-            return self._extract_allergy_kit_section(text, section_filter)
+        # 알레르기는 일반 텍스트 포맷 적용
+        if category == "알레르기":
+            return self._extract_general_text(text)
 
         # 비건/할랄/동물DNA는 전용 포맷 적용
         if category in ["비건", "할랄", "동물DNA"]:

@@ -61,7 +61,7 @@ URL_MAPPING = {
     },
     "알레르기": {
         "분석종류": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_26",
-        "RT-PCR": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_151",
+        "RT-PCR": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_251",
         "Elisa": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_151"
     },
     "글루텐Free": {
@@ -119,7 +119,7 @@ GENERAL_POPUP_MAPPING = {
     },
     "알레르기": {
         "분석종류": "question_26",
-        "RT-PCR": "question_151",
+        "RT-PCR": "question_251",
         "Elisa": "question_151"
     },
     "글루텐Free": {
@@ -161,8 +161,8 @@ DISPLAY_Q_NUMBER = {
     },
     "알레르기": {
         "분석종류": 6,       # Q6.
-        "RT-PCR": 7,         # Q7.
-        "Elisa": 7           # Q7. (같은 페이지)
+        "RT-PCR": 8,         # Q8. (별도 페이지)
+        "Elisa": 7           # Q7.
     },
     "글루텐Free": {
         "Free기준": 1
@@ -178,11 +178,8 @@ SECTION_FILTER = {
     "소비기한설정": {
         "가속실험": "2) 가속실험",  # "2) 가속실험(3개월이상 제품)" 섹션만
         "실측실험": "1) 실측실험"   # "1) 실측실험 (3개월이내 제품)" 섹션만
-    },
-    "알레르기": {
-        "RT-PCR": "RT-PCR Kit",    # "RT-PCR Kit" 섹션만
-        "Elisa": "ELISA Kit"       # "ELISA Kit" 섹션만
     }
+    # 알레르기 RT-PCR/Elisa는 이제 별도 페이지로 분리됨
 }
 
 # 스케줄러 설정 (매일 크롤링 시간)
