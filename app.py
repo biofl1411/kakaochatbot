@@ -1215,7 +1215,7 @@ def chatbot():
             "비건": ["검사안내"],
             "할랄": ["검사안내"],
             "동물DNA": ["검사안내"],
-            "알레르기": ["분석종류", "RT-PCR", "Elisa"],
+            "알레르기": ["RT-PCR", "Elisa"],  # 분석종류는 전용 핸들러로 처리
             "글루텐Free": ["Free기준"],
             "소비기한설정": ["가속실험", "실측실험"]
             # 검사주기알림은 전용 핸들러로 처리 (별도 포맷팅)
@@ -1287,6 +1287,29 @@ def chatbot():
             return make_response_with_link(
                 response_text,
                 get_question_label("자가품질검사", "검사주기알림"),
+                detail_url,
+                ["이전", "처음으로"]
+            )
+
+        # ===== 알레르기 > 분석종류 =====
+        if user_input == "분석종류" and user_data.get("검사분야_메뉴") == "알레르기":
+            # 응답 화면으로 이동 시 현재_메뉴 초기화 (이전 버튼이 부모 메뉴로 돌아가도록)
+            user_data.pop("현재_메뉴", None)
+
+            response_text = """📋 알레르기 - 분석종류
+
+국내에 알려진 알레르기 물질 분석 방법에는 Strip 검사, RT-PCR을 활용한 DNA 검사, Elisa 장비를 활용한 알레르기 물질의 단백질 유무 검사가 있습니다.
+
+📋 검사항목
+• RT-PCR (DNA): 단백질처럼 특정 제조 가공 공정에 따라 분해될 확률이 적고 극미량으로도 검출이 가능. 단, 알레르기를 일으키는 항원의 활성 여부는 확인할 수 없음.
+• ELISA protein: 알레르기를 일으키는 항원은 단백질로 구성되어 있으며, FDA에서는 알레르기 분석을 RT-PCR이 아닌 Elisa 장비를 활용하여 분석하고 있음.
+
+⚠️ 참고사항
+• 분석 시료: 알레르기 분석 시료는 완제품, Swab, 세척수, 분말 제품을 생산하는 경우 공기중의 알레르기 물질을 검증할 수 있습니다. 자세한 내용은 "홈페이지▶️사업분야▶️알레르기검사"를 참고바랍니다."""
+            detail_url = "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9&question_26"
+            return make_response_with_link(
+                response_text,
+                get_question_label("알레르기", "분석종류"),
                 detail_url,
                 ["이전", "처음으로"]
             )
