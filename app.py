@@ -356,6 +356,27 @@ def is_image_url(text: str) -> bool:
     return False
 
 
+def get_question_label(url: str) -> str:
+    """URL에서 question 번호를 추출하여 버튼 라벨 생성
+
+    Args:
+        url: 링크 URL (예: "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_97")
+
+    Returns:
+        버튼 라벨 (예: "🔗 Q.97번 참고")
+    """
+    if not url:
+        return "🔗 자세히 보기"
+
+    # URL에서 question_숫자 패턴 추출
+    match = re.search(r'question_(\d+)', url)
+    if match:
+        question_num = match.group(1)
+        return f"🔗 Q.{question_num}번 참고"
+
+    return "🔗 자세히 보기"
+
+
 def make_response(text: str, buttons: list = None):
     """카카오 챗봇 응답 형식 생성"""
     response = {
@@ -1099,7 +1120,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    "🔗 자세히 보기",
+                    get_question_label(detail_url),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1136,7 +1157,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    "🔗 자세히 보기",
+                    get_question_label(detail_url),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1175,7 +1196,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    "🔗 자세히 보기",
+                    get_question_label(detail_url),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1233,7 +1254,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    "🔗 자세히 보기",
+                    get_question_label(detail_url),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1262,10 +1283,11 @@ def chatbot():
 
 ❓ 검사기간에 제조한 제품이 없는 경우
 검사기간이 도래하는 시기에 해당 제품의 생산이 없다면, 그 이후 최초로 제조·가공한 제품에 대해 자가품질검사를 하셔야 합니다."""
+            detail_url = "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198"
             return make_response_with_link(
                 response_text,
-                "🔗 자세히 보기",
-                "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198",
+                get_question_label(detail_url),
+                detail_url,
                 ["이전", "처음으로"]
             )
 
