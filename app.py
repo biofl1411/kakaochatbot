@@ -135,21 +135,33 @@ def format_items_list(items_text: str) -> str:
     if current_item.strip():
         items.append(current_item.strip())
 
-    # 카테고리 헤더 패턴 (괄호로 시작하고 끝나는 항목)
-    # 예: (매월 1회 이상), (제품 생산 단위별), (연 1회 이상) 등
-    category_pattern = re.compile(r'^\([^)]+\)$')
+    # 카테고리 헤더 패턴
+    # 예: (매월 1회 이상), (제품 생산 단위별), (비살균 제품) 등
+    category_only_pattern = re.compile(r'^\([^)]+\)$')  # 카테고리만 있는 경우
+    category_with_item_pattern = re.compile(r'^(\([^)]+\))(.+)$')  # 카테고리+항목 붙은 경우
 
     # 각 항목에 띄어쓰기 추가 후 포맷팅
     formatted_items = []
     for item in items:
         formatted_item = format_korean_spacing(item)
 
-        # 카테고리 헤더인지 확인
-        if category_pattern.match(formatted_item):
-            # 첫 번째가 아니면 빈 줄 추가
+        # 카테고리 헤더만 있는 경우
+        if category_only_pattern.match(formatted_item):
             if formatted_items:
                 formatted_items.append("")
             formatted_items.append(formatted_item)
+        # 카테고리 헤더 + 항목이 붙어있는 경우 (예: "(비살균 제품)아질산이온")
+        elif category_with_item_pattern.match(formatted_item):
+            match = category_with_item_pattern.match(formatted_item)
+            category_header = match.group(1)
+            item_text = match.group(2).strip()
+            # 카테고리 헤더 추가
+            if formatted_items:
+                formatted_items.append("")
+            formatted_items.append(category_header)
+            # 항목 추가
+            if item_text:
+                formatted_items.append(f"• {item_text}")
         else:
             formatted_items.append(f"• {formatted_item}")
 
