@@ -672,6 +672,90 @@ class Crawler:
         logger.info(f"포맷팅된 알레르기 결과 길이: {len(result)}")
         return result
 
+    def _extract_dna_test_info(self, text: str, category: str) -> str:
+        """비건/할랄/동물DNA 검사 정보 추출"""
+        if not text:
+            return ""
+
+        logger.info(f"{category} 검사안내 추출")
+
+        # "Close", "자세히 보기" 등 버튼 텍스트 제거
+        text = re.sub(r'\bClose\b', '', text)
+        text = re.sub(r'자세히\s*보기', '', text)
+        # Q 제목 제거
+        text = re.sub(r'Q\d+\.[^Q]*?(?=DN|검사|Kit|필요한|$)', '', text, count=1)
+
+        lines = []
+
+        # 검사 키트 추출
+        kit_names = re.findall(r'(DNAnimal\s+(?:Screen|Ident)\s+[A-Za-z\s&]+(?:Kit)?)', text, re.IGNORECASE)
+        if kit_names:
+            # 중복 제거
+            unique_kits = []
+            for kit in kit_names:
+                kit_clean = re.sub(r'\s+', ' ', kit).strip()
+                if kit_clean not in unique_kits:
+                    unique_kits.append(kit_clean)
+
+            lines.append("🧪 검사 키트")
+            for kit in unique_kits[:4]:  # 최대 4개
+                lines.append(f"  • {kit}")
+
+            # 키트 사용 관련 설명 추출
+            kit_usage = re.search(r'(\d+\s*가지의?\s*키트를?\s*사용하여\s*총\s*\d+\s*종의?\s*동물)', text)
+            if kit_usage:
+                lines.append(f"  * {kit_usage.group(1)}")
+            lines.append("")
+
+        # 동물종 확인 추출
+        species_match = re.search(r'(동물종\s*확인|동물\s*종\s*확인)[^*]*', text)
+        if species_match:
+            lines.append("🧪 동물종 확인")
+            # 동물종 확인용 키트 추출
+            ident_kits = re.findall(r'(DNAnimal\s+(?:Screen|Ident)\s+[A-Za-z\s&]+(?:Kit)?)', species_match.group(0), re.IGNORECASE)
+            for kit in ident_kits[:2]:
+                kit_clean = re.sub(r'\s+', ' ', kit).strip()
+                lines.append(f"  • {kit_clean}")
+            lines.append("  * 동물종 확인은 홈페이지에서 가능합니다.")
+            lines.append("")
+
+        # 시료량 추출
+        sample_match = re.search(r'(필요한\s*시료량?\s*[:：]?\s*\d+\s*g?\s*이상)', text)
+        if sample_match:
+            lines.append("📦 시료량")
+            sample_text = sample_match.group(1).strip()
+            sample_text = re.sub(r'\s+', ' ', sample_text)
+            lines.append(f"  • {sample_text}")
+
+            # 비용 안내 추출
+            cost_match = re.search(r"(검사\s*비용은\s*[^.]+)", text)
+            if cost_match:
+                cost_text = cost_match.group(1).strip()
+                cost_text = re.sub(r'\s+', ' ', cost_text)
+                lines.append(f"  • {cost_text}")
+            lines.append("")
+
+        # 참고사항 추출 (Screen Kit 관련)
+        note_match = re.search(r'(Screen\s*Kit는?\s*동물\s*DNA를?\s*특정[^.]+\.)', text)
+        if note_match:
+            lines.append("⚠️ 참고사항")
+            note_text = note_match.group(1).strip()
+            note_text = re.sub(r'\s+', ' ', note_text)
+            lines.append(f"  • {note_text}")
+
+            # 추가 참고사항
+            additional_note = re.search(r'(특정\s*하고자\s*하시는\s*경우[^.]+\.)', text)
+            if additional_note:
+                add_text = additional_note.group(1).strip()
+                add_text = re.sub(r'\s+', ' ', add_text)
+                lines.append(f"  • {add_text}")
+
+        result = '\n'.join(lines)
+        # 연속된 빈 줄 정리
+        result = re.sub(r'\n{3,}', '\n\n', result)
+        logger.info(f"포맷팅된 {category} 결과 길이: {len(result)}")
+        return result
+
     def _extract_items_from_text(self, text: str, category: str = None, section_filter: str = None) -> str:
         """텍스트에서 항목들을 추출하여 포맷팅"""
         if not text:
@@ -688,6 +772,10 @@ class Crawler:
         # 알레르기는 키트 섹션 필터 적용
         if category == "알레르기" and section_filter:
             return self._extract_allergy_kit_section(text, section_filter)
+
+        # 비건/할랄/동물DNA는 전용 포맷 적용
+        if category in ["비건", "할랄", "동물DNA"]:
+            return self._extract_dna_test_info(text, category)
 
         # 제목 제거 (Q로 시작하는 질문 제목 전체)
         # Q3.비건(Vegan) 검사의 종류와 시료량 같은 제목 전체 제거
