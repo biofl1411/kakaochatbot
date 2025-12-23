@@ -646,7 +646,7 @@ INSPECTION_MENU = {
     "submenus": {
         "자가품질검사": {
             "title": "자가품질검사",
-            "buttons": ["식품", "축산", "검사주기알림", "이전", "처음으로"],
+            "buttons": ["식품", "축산", "검사주기알림", "검사수수료", "이전", "처음으로"],
             "parent": "검사분야"
         },
         "영양성분검사": {
@@ -1288,6 +1288,30 @@ def chatbot():
                 response_text,
                 get_question_label("자가품질검사", "검사주기알림"),
                 detail_url,
+                ["이전", "처음으로"]
+            )
+
+        # ===== 자가품질검사 > 검사수수료 =====
+        if user_input == "검사수수료" and user_data.get("검사분야_메뉴") == "자가품질검사":
+            user_data.pop("현재_메뉴", None)
+
+            response_text = """💰 검사 수수료 안내
+
+검사 수수료는 많은 유형과 항목들로 인하여 홈페이지를 통해 견적서를 받아보실 수 있습니다.
+
+📝 견적 요청 방법
+홈페이지 → 고객지원 → 온라인견적&검사의뢰
+
+✨ 홈페이지 이용 혜택
+• 📋 견적서 1개월 저장
+• 💳 홈페이지 카드결제 가능
+• 📄 검사의뢰서 1년 저장
+• 🔔 자가품질검사 알림 발송
+• 🎁 이벤트 쿠폰 발급"""
+            return make_response_with_link(
+                response_text,
+                "🔗 온라인견적&검사의뢰",
+                "https://www.biofl.co.kr/sub.jsp?code=e7KU3a87",
                 ["이전", "처음으로"]
             )
 
