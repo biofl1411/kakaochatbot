@@ -99,6 +99,7 @@ def format_items_list(items_text: str) -> str:
     """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환
 
     괄호 [], () 안의 콤마는 항목 구분자가 아니므로 무시
+    카테고리 헤더 (매월 1회 이상), (제품 생산 단위별) 등은 bullet 없이 표시
     """
     if not items_text:
         return items_text
@@ -134,11 +135,23 @@ def format_items_list(items_text: str) -> str:
     if current_item.strip():
         items.append(current_item.strip())
 
-    # 각 항목에 띄어쓰기 추가 후 bullet point로 포맷팅
+    # 카테고리 헤더 패턴 (괄호로 시작하고 끝나는 항목)
+    # 예: (매월 1회 이상), (제품 생산 단위별), (연 1회 이상) 등
+    category_pattern = re.compile(r'^\([^)]+\)$')
+
+    # 각 항목에 띄어쓰기 추가 후 포맷팅
     formatted_items = []
     for item in items:
         formatted_item = format_korean_spacing(item)
-        formatted_items.append(f"• {formatted_item}")
+
+        # 카테고리 헤더인지 확인
+        if category_pattern.match(formatted_item):
+            # 첫 번째가 아니면 빈 줄 추가
+            if formatted_items:
+                formatted_items.append("")
+            formatted_items.append(formatted_item)
+        else:
+            formatted_items.append(f"• {formatted_item}")
 
     return '\n'.join(formatted_items)
 
