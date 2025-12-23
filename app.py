@@ -138,7 +138,10 @@ def format_items_list(items_text: str) -> str:
     # 카테고리 헤더 패턴
     # 예: (매월 1회 이상), (제품 생산 단위별), (비살균 제품) 등
     category_only_pattern = re.compile(r'^\([^)]+\)$')  # 카테고리만 있는 경우
-    category_with_item_pattern = re.compile(r'^(\([^)]+\))(.+)$')  # 카테고리+항목 붙은 경우
+    category_with_item_pattern = re.compile(r'^(\([^)]+\))\s*(.+)$')  # 카테고리+항목 붙은 경우
+    # 항목 중간에 카테고리가 있는 경우: 보존료(카테고리) 아질산이온
+    # 괄호 뒤에 내용이 있으면 카테고리 헤더로 판단
+    embedded_category_pattern = re.compile(r'^([^(]+)(\([^)]+\))\s*(.+)$')
 
     # 각 항목에 띄어쓰기 추가 후 포맷팅
     formatted_items = []
@@ -162,6 +165,22 @@ def format_items_list(items_text: str) -> str:
             # 항목 추가
             if item_text:
                 formatted_items.append(f"• {item_text}")
+        # 항목 중간에 카테고리가 있는 경우 (예: "보존료(카테고리) 아질산이온")
+        elif embedded_category_pattern.match(formatted_item):
+            match = embedded_category_pattern.match(formatted_item)
+            before_item = match.group(1).strip()
+            category_header = match.group(2)
+            after_item = match.group(3).strip()
+            # 이전 카테고리의 마지막 항목
+            if before_item:
+                formatted_items.append(f"• {before_item}")
+            # 새 카테고리 헤더
+            if formatted_items:
+                formatted_items.append("")
+            formatted_items.append(f"✏️ {category_header}")
+            # 새 카테고리의 첫 항목
+            if after_item:
+                formatted_items.append(f"• {after_item}")
         else:
             formatted_items.append(f"• {formatted_item}")
 
