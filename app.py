@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
-from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING
+from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER
 from models import (
     init_database,
     get_inspection_item,
@@ -356,23 +356,23 @@ def is_image_url(text: str) -> bool:
     return False
 
 
-def get_question_label(url: str) -> str:
-    """URL에서 question 번호를 추출하여 버튼 라벨 생성
+def get_question_label(category: str, menu_item: str) -> str:
+    """카테고리와 메뉴 항목에서 Q번호를 조회하여 버튼 라벨 생성
 
     Args:
-        url: 링크 URL (예: "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV&question_97")
+        category: 카테고리 (예: "영양성분검사", "소비기한설정")
+        menu_item: 메뉴 항목 (예: "검사종류", "가속실험")
 
     Returns:
-        버튼 라벨 (예: "🔗 Q.97번 참고")
+        버튼 라벨 (예: "🔗 Q.1번 참고")
     """
-    if not url:
+    if not category or not menu_item:
         return "🔗 자세히 보기"
 
-    # URL에서 question_숫자 패턴 추출
-    match = re.search(r'question_(\d+)', url)
-    if match:
-        question_num = match.group(1)
-        return f"🔗 Q.{question_num}번 참고"
+    # DISPLAY_Q_NUMBER에서 Q번호 조회
+    q_number = DISPLAY_Q_NUMBER.get(category, {}).get(menu_item)
+    if q_number:
+        return f"🔗 Q.{q_number}번 참고"
 
     return "🔗 자세히 보기"
 
@@ -1120,7 +1120,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    get_question_label(detail_url),
+                    get_question_label("영양성분검사", user_input),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1157,7 +1157,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    get_question_label(detail_url),
+                    get_question_label("영양성분검사", "검사종류"),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1196,7 +1196,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    get_question_label(detail_url),
+                    get_question_label("영양성분검사", url_key),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1254,7 +1254,7 @@ def chatbot():
             if detail_url:
                 return make_response_with_link(
                     response_text,
-                    get_question_label(detail_url),
+                    get_question_label(current_menu, user_input),
                     detail_url,
                     ["이전", "처음으로"]
                 )
@@ -1286,7 +1286,7 @@ def chatbot():
             detail_url = "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94&question_198"
             return make_response_with_link(
                 response_text,
-                get_question_label(detail_url),
+                get_question_label("자가품질검사", "검사주기알림"),
                 detail_url,
                 ["이전", "처음으로"]
             )
