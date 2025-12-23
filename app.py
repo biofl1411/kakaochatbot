@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
-from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER
+from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER, NUTRITION_LABEL_CATEGORIES
 from models import (
     init_database,
     get_inspection_item,
@@ -435,6 +435,74 @@ def format_nutrition_component_data(data_text: str) -> str:
     result.append("* VAT 별도")
 
     return '\n'.join(result)
+
+
+def find_food_type_category(food_type: str) -> dict:
+    """식품유형을 검색하여 해당 카테고리 정보 반환
+
+    Returns:
+        dict with keys:
+        - found: bool
+        - category: str (기존시행, 2021개정, 2024개정, 제외대상)
+        - info: dict (해당 카테고리의 상세 정보)
+        - 제외사유: str (제외대상인 경우)
+    """
+    food_type = food_type.strip()
+
+    # 기존시행 검색
+    if food_type in NUTRITION_LABEL_CATEGORIES["기존시행"]["식품유형"]:
+        return {
+            "found": True,
+            "category": "기존시행",
+            "info": NUTRITION_LABEL_CATEGORIES["기존시행"]
+        }
+
+    # 2021개정 검색
+    if food_type in NUTRITION_LABEL_CATEGORIES["2021개정"]["식품유형"]:
+        return {
+            "found": True,
+            "category": "2021개정",
+            "info": NUTRITION_LABEL_CATEGORIES["2021개정"]
+        }
+
+    # 2024개정 검색
+    if food_type in NUTRITION_LABEL_CATEGORIES["2024개정"]["식품유형"]:
+        return {
+            "found": True,
+            "category": "2024개정",
+            "info": NUTRITION_LABEL_CATEGORIES["2024개정"]
+        }
+
+    # 제외대상 검색
+    for reason, food_list in NUTRITION_LABEL_CATEGORIES["제외대상"].items():
+        if food_type in food_list:
+            return {
+                "found": True,
+                "category": "제외대상",
+                "제외사유": reason
+            }
+
+    # 부분 일치 검색 (유사 결과)
+    similar_results = []
+    for category_name, category_data in NUTRITION_LABEL_CATEGORIES.items():
+        if category_name == "제외대상":
+            for reason, food_list in category_data.items():
+                for item in food_list:
+                    if food_type in item or item in food_type:
+                        similar_results.append((item, f"제외대상({reason})"))
+        else:
+            food_list = category_data.get("식품유형", [])
+            for item in food_list:
+                if food_type in item or item in food_type:
+                    similar_results.append((item, category_name))
+
+    if similar_results:
+        return {
+            "found": False,
+            "similar": similar_results[:5]  # 최대 5개
+        }
+
+    return {"found": False}
 
 
 def is_image_url(text: str) -> bool:
@@ -1019,6 +1087,21 @@ def chatbot():
                     ["배합 함량", "당알코올 계산", "이전", "처음으로"]
                 )
 
+            # 표시대상확인 모드에서 이전 -> 영양성분검사 메뉴로
+            if user_data.get("표시대상_모드"):
+                user_data.pop("표시대상_모드", None)
+                user_data.pop("표시대상_단계", None)
+                user_data.pop("표시대상_식품유형", None)
+                user_data.pop("표시대상_카테고리", None)
+                user_data.pop("표시대상_배추김치", None)
+                user_data.pop("표시대상_개정정보", None)
+                submenu = INSPECTION_MENU["submenus"]["영양성분검사"]
+                user_data["현재_메뉴"] = "영양성분검사"
+                return make_response(
+                    f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                    submenu["buttons"]
+                )
+
             # 1. 먼저 검사분야_메뉴가 있으면 해당 메뉴로 돌아감 (응답 화면에서)
             current_inspection_menu = user_data.get("검사분야_메뉴")
             current_menu = user_data.get("현재_메뉴")
@@ -1418,43 +1501,244 @@ def chatbot():
                         ["이전", "처음으로"]
                     )
 
-        # ===== 영양성분검사 > 표시대상확인 선택 시 DB 조회 =====
+        # ===== 영양성분검사 > 표시대상확인 선택 시 (대화형) =====
         if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input == "표시대상확인":
-            # DB에서 크롤링된 데이터 조회
-            db_data = get_nutrition_info("영양성분검사", user_input)
-
-            # URL 가져오기
-            detail_url = URL_MAPPING.get("영양성분검사", {}).get(user_input)
-
-            # 응답 화면으로 이동 시 현재_메뉴 초기화
+            user_data["표시대상_모드"] = True
+            user_data["표시대상_단계"] = "식품유형_입력"
             user_data.pop("현재_메뉴", None)
 
-            if db_data and db_data.get("details"):
-                # 데이터에 링크가 포함되어 있는지 확인
-                if has_links_in_data(db_data['details']):
-                    data_sections = parse_data_with_links(db_data['details'])
-                    carousel_response = make_carousel_with_links_response(
-                        user_input,
-                        data_sections,
+            response_text = """📋 영양성분 표시대상 확인
+
+영양성분 표시 시행일을 확인해드립니다.
+
+━━━━━━━━━━━━━━━
+📌 안내
+━━━━━━━━━━━━━━━
+식품유형에 따라 영양성분 표시 적용 시기가 다릅니다.
+- 기존 시행 품목: 즉시 적용
+- 2021 개정: 2019년 매출액 기준
+- 2024 개정: 2022년 매출액 기준
+- 일부 품목: 영양표시 제외 대상
+
+━━━━━━━━━━━━━━━
+🔍 식품유형을 입력해주세요
+━━━━━━━━━━━━━━━
+예: 빵류, 과자, 두부, 배추김치"""
+
+            return make_response(response_text, ["이전", "처음으로"])
+
+        # ===== 표시대상확인 진행 =====
+        if user_data.get("표시대상_모드"):
+            step = user_data.get("표시대상_단계")
+
+            # 식품유형 입력 단계
+            if step == "식품유형_입력":
+                search_result = find_food_type_category(user_input)
+
+                if search_result.get("found"):
+                    category = search_result.get("category")
+                    user_data["표시대상_식품유형"] = user_input
+                    user_data["표시대상_카테고리"] = category
+
+                    # 기존시행 - 즉시 적용
+                    if category == "기존시행":
+                        # 모드 초기화
+                        user_data.pop("표시대상_모드", None)
+                        user_data.pop("표시대상_단계", None)
+
+                        response_text = f"""✅ 영양성분 표시대상 확인 결과
+
+━━━━━━━━━━━━━━━
+📊 조회 정보
+━━━━━━━━━━━━━━━
+• 식품유형: {user_input}
+• 분류: 기존 시행 품목
+
+━━━━━━━━━━━━━━━
+📌 결과
+━━━━━━━━━━━━━━━
+✨ 영양성분 표시 의무: 즉시 적용
+
+이미 영양성분 표시 의무가 적용된 품목입니다."""
+                        return make_response(response_text, ["표시대상확인", "이전", "처음으로"])
+
+                    # 제외대상
+                    elif category == "제외대상":
+                        reason = search_result.get("제외사유", "")
+                        reason_text = {
+                            "영양성분섭취목적아님": "영양성분 섭취 목적의 식품이 아님",
+                            "영양성분함량적음": "영양성분 함량이 미미함",
+                            "표준화어려움": "표준화 또는 균질화가 어려움"
+                        }.get(reason, reason)
+
+                        # 모드 초기화
+                        user_data.pop("표시대상_모드", None)
+                        user_data.pop("표시대상_단계", None)
+
+                        response_text = f"""✅ 영양성분 표시대상 확인 결과
+
+━━━━━━━━━━━━━━━
+📊 조회 정보
+━━━━━━━━━━━━━━━
+• 식품유형: {user_input}
+• 분류: 영양표시 제외 대상
+
+━━━━━━━━━━━━━━━
+📌 결과
+━━━━━━━━━━━━━━━
+✨ 영양성분 표시 의무: 없음
+
+━━━━━━━━━━━━━━━
+📝 제외 사유
+━━━━━━━━━━━━━━━
+{reason_text}"""
+                        return make_response(response_text, ["표시대상확인", "이전", "처음으로"])
+
+                    # 2021개정 또는 2024개정 - 매출액 확인 필요
+                    else:
+                        info = search_result.get("info", {})
+                        user_data["표시대상_단계"] = "매출액_입력"
+                        user_data["표시대상_개정정보"] = info
+
+                        기준년도 = info.get("매출기준년도")
+                        개정일 = info.get("개정일")
+
+                        # 배추김치 여부 확인 (2021개정에서만 다른 기준 적용)
+                        is_kimchi = user_input == "배추김치"
+                        user_data["표시대상_배추김치"] = is_kimchi
+
+                        if category == "2021개정":
+                            if is_kimchi:
+                                threshold_info = "300억 이상 / 50억~300억 미만 / 50억 미만"
+                            else:
+                                threshold_info = "120억 이상 / 50억~120억 미만 / 50억 미만"
+                        else:  # 2024개정
+                            threshold_info = "120억 초과 / 120억 이하"
+
+                        response_text = f"""📋 영양성분 표시대상 확인
+
+━━━━━━━━━━━━━━━
+📊 조회 정보
+━━━━━━━━━━━━━━━
+• 식품유형: {user_input}
+• 분류: {개정일} 개정 품목
+
+━━━━━━━━━━━━━━━
+📌 매출액 기준
+━━━━━━━━━━━━━━━
+• 기준 년도: {기준년도}년
+• 구간: {threshold_info}
+
+━━━━━━━━━━━━━━━
+🔢 {기준년도}년 매출액을 입력해주세요
+━━━━━━━━━━━━━━━
+숫자만 입력 (단위: 억원)
+
+예: 50, 120, 300"""
+                        return make_response(response_text, ["이전", "처음으로"])
+
+                else:
+                    # 유사 결과가 있는 경우
+                    similar = search_result.get("similar", [])
+                    if similar:
+                        similar_text = "\n".join([f"• {item[0]} ({item[1]})" for item in similar])
+                        response_text = f"""❌ '{user_input}'을(를) 찾을 수 없습니다.
+
+━━━━━━━━━━━━━━━
+🔍 유사한 식품유형
+━━━━━━━━━━━━━━━
+{similar_text}
+
+정확한 식품유형을 다시 입력해주세요."""
+                    else:
+                        response_text = f"""❌ '{user_input}'을(를) 찾을 수 없습니다.
+
+등록된 식품유형이 아닙니다.
+정확한 식품유형을 다시 입력해주세요.
+
+예: 빵류, 과자, 두부, 배추김치"""
+
+                    return make_response(response_text, ["이전", "처음으로"])
+
+            # 매출액 입력 단계
+            if step == "매출액_입력":
+                try:
+                    # 숫자 추출 (억, 원 등 단위 제거)
+                    revenue_str = re.sub(r'[억원,\s]', '', user_input)
+                    revenue = float(revenue_str)
+
+                    category = user_data.get("표시대상_카테고리")
+                    food_type = user_data.get("표시대상_식품유형")
+                    is_kimchi = user_data.get("표시대상_배추김치", False)
+                    info = user_data.get("표시대상_개정정보", {})
+
+                    # 시행일 계산
+                    if category == "2021개정":
+                        if is_kimchi:
+                            # 배추김치 기준
+                            if revenue >= 300:
+                                시행일 = "2022.01.01"
+                                구간 = "300억 이상"
+                            elif revenue >= 50:
+                                시행일 = "2024.01.01"
+                                구간 = "50억~300억 미만"
+                            else:
+                                시행일 = "2026.01.01"
+                                구간 = "50억 미만"
+                        else:
+                            # 일반 기준
+                            if revenue >= 120:
+                                시행일 = "2022.01.01"
+                                구간 = "120억 이상"
+                            elif revenue >= 50:
+                                시행일 = "2024.01.01"
+                                구간 = "50억~120억 미만"
+                            else:
+                                시행일 = "2026.01.01"
+                                구간 = "50억 미만"
+                    else:  # 2024개정
+                        if revenue > 120:
+                            시행일 = "2026.01.01"
+                            구간 = "120억 초과"
+                        else:
+                            시행일 = "2028.01.01"
+                            구간 = "120억 이하"
+
+                    기준년도 = info.get("매출기준년도")
+                    개정일 = info.get("개정일")
+
+                    # 모드 초기화
+                    user_data.pop("표시대상_모드", None)
+                    user_data.pop("표시대상_단계", None)
+                    user_data.pop("표시대상_식품유형", None)
+                    user_data.pop("표시대상_카테고리", None)
+                    user_data.pop("표시대상_배추김치", None)
+                    user_data.pop("표시대상_개정정보", None)
+
+                    response_text = f"""✅ 영양성분 표시대상 확인 결과
+
+━━━━━━━━━━━━━━━
+📊 조회 정보
+━━━━━━━━━━━━━━━
+• 식품유형: {food_type}
+• 분류: {개정일} 개정 품목
+• {기준년도}년 매출액: {revenue}억원
+• 매출 구간: {구간}
+
+━━━━━━━━━━━━━━━
+📌 결과
+━━━━━━━━━━━━━━━
+✨ 영양성분 표시 시행일: {시행일}
+
+{시행일}부터 영양성분 표시가 의무화됩니다."""
+
+                    return make_response(response_text, ["표시대상확인", "이전", "처음으로"])
+
+                except ValueError:
+                    return make_response(
+                        "❌ 숫자를 입력해주세요.\n\n예: 50, 120, 300",
                         ["이전", "처음으로"]
                     )
-                    if carousel_response:
-                        return carousel_response
-
-                formatted_data = format_crawled_data(db_data['details'])
-                response_text = f"📋 {user_input}\n\n{formatted_data}"
-            else:
-                response_text = f"📋 {user_input}\n\n크롤링된 데이터가 없습니다.\n서버에서 'python crawler.py'를 실행해주세요."
-
-            if detail_url:
-                return make_response_with_link(
-                    response_text,
-                    get_question_label("영양성분검사", user_input),
-                    detail_url,
-                    ["이전", "처음으로"]
-                )
-            else:
-                return make_response(response_text, ["이전", "처음으로"])
 
         # ===== 영양성분검사 > 검사종류 > 영양표시 종류 선택 시 DB 조회 =====
         if user_data.get("영양성분_검사종류") and user_input == "영양표시 종류":
