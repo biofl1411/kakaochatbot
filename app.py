@@ -1216,7 +1216,7 @@ def chatbot():
             "할랄": ["검사안내"],
             "동물DNA": ["검사안내"],
             # 알레르기는 전용 핸들러로 처리 (분석종류, RT-PCR, Elisa)
-            "글루텐Free": ["Free기준"],
+            # 글루텐Free는 전용 핸들러로 처리
             "소비기한설정": ["가속실험", "실측실험"]
             # 검사주기알림은 전용 핸들러로 처리 (별도 포맷팅)
         }
@@ -1356,6 +1356,34 @@ def chatbot():
             return make_response_with_link(
                 response_text,
                 get_question_label("알레르기", "Elisa"),
+                detail_url,
+                ["이전", "처음으로"]
+            )
+
+        # ===== 글루텐Free > Free기준 =====
+        if user_input == "Free기준" and user_data.get("검사분야_메뉴") == "글루텐Free":
+            user_data.pop("현재_메뉴", None)
+
+            response_text = """🌾 글루텐Free 검사와 표기
+
+📌 글루텐(Gluten)이란?
+밀, 보리, 호밀 등에서 글리아딘(Gliadin)과 글루테닌(Glutenin)으로 존재하다가 물과 결합하여 생기는 물질입니다.
+반죽의 쫄깃한 식감을 주거나 빵을 부풀어 오르게 하는 역할을 하지만, 체질에 따라 복통이나 소화 불안정, 피부염 등을 유발할 수 있습니다.
+
+📋 국내 '무 글루텐' 표시 기준
+• 밀, 호밀, 보리, 귀리 또는 교배종을 원재료로 사용하지 않고 총 글루텐 함량이 20mg/kg 이하인 식품
+• 글루텐을 제거한 원재료를 사용하여 총 글루텐 함량이 20mg/kg 이하인 식품
+
+🌍 국외 기준
+• 미국 FDA: 20 ppm 이하
+• 유럽연합 EFSA: 무 글루텐(20ppm) 또는 저 글루텐(100ppm)
+
+🔬 바이오푸드랩 검사
+AOAC International 등재 Kit 사용으로 검사의 신뢰성과 정확성을 보장합니다."""
+            detail_url = "https://www.biofl.co.kr/sub.jsp?code=EJ2GKW3&question_161"
+            return make_response_with_link(
+                response_text,
+                get_question_label("글루텐Free", "Free기준"),
                 detail_url,
                 ["이전", "처음으로"]
             )
