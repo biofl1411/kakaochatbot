@@ -149,7 +149,7 @@ def format_items_list(items_text: str) -> str:
         if category_only_pattern.match(formatted_item):
             if formatted_items:
                 formatted_items.append("")
-            formatted_items.append(formatted_item)
+            formatted_items.append(f"✏️ {formatted_item}")
         # 카테고리 헤더 + 항목이 붙어있는 경우 (예: "(비살균 제품)아질산이온")
         elif category_with_item_pattern.match(formatted_item):
             match = category_with_item_pattern.match(formatted_item)
@@ -158,7 +158,7 @@ def format_items_list(items_text: str) -> str:
             # 카테고리 헤더 추가
             if formatted_items:
                 formatted_items.append("")
-            formatted_items.append(category_header)
+            formatted_items.append(f"✏️ {category_header}")
             # 항목 추가
             if item_text:
                 formatted_items.append(f"• {item_text}")
