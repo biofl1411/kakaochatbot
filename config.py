@@ -45,10 +45,10 @@ URL_MAPPING = {
         "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_90"
     },
     "잔류농약": {
-        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_90"
+        "검사종류": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0&question_85"
     },
     "방사능": {
-        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=HY5KJJJI&question_90"
+        "검사안내": "https://www.biofl.co.kr/sub.jsp?code=HY5KJJJI&question_39"
     },
     "비건": {
         "검사안내": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7&question_185"
@@ -145,10 +145,10 @@ DISPLAY_Q_NUMBER = {
         "검사종류": 8        # Q8.
     },
     "잔류농약": {
-        "검사종류": 8        # Q8. (같은 페이지)
+        "검사종류": 3        # Q3.
     },
     "방사능": {
-        "검사안내": 1
+        "검사안내": 3        # Q3.
     },
     "비건": {
         "검사안내": 3        # Q3.
