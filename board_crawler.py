@@ -157,6 +157,8 @@ class BoardCrawler:
     def crawl_board_content(self, category: str, base_url: str, question_id: str) -> dict:
         """
         특정 게시판 팝업에서 제목과 내용 추출
+        - answerPopOpen 링크를 클릭하여 팝업 내용 로드
+        - answerWrap에서 실제 Q&A 내용 추출
 
         Args:
             category: 카테고리명
@@ -166,42 +168,38 @@ class BoardCrawler:
         Returns:
             {"title": 제목, "content": 내용} 또는 None
         """
-        url = f"{base_url}&{question_id}"
         driver = self._get_driver()
 
         try:
-            driver.get(url)
-            time.sleep(1)  # 페이지 로딩 대기
+            # 1. 기본 페이지 로드
+            driver.get(base_url)
+            time.sleep(1.5)
 
-            # 팝업 요소 찾기
-            wait = WebDriverWait(driver, 5)
+            # 2. 해당 question의 팝업 링크 찾기 및 클릭
+            popup_link_selector = f'a[data-needpopup-show="#{question_id}"]'
+            try:
+                popup_link = driver.find_element(By.CSS_SELECTOR, popup_link_selector)
 
-            # 제목 추출 시도 (여러 선택자)
-            title = None
-            title_selectors = [
-                f"#{question_id} .answer-header",
-                f"#{question_id} h3",
-                f"#{question_id} .title",
-                f"#{question_id} strong",
-                f"div[id='{question_id}'] .answer-header"
-            ]
+                # 링크 텍스트가 질문 제목
+                link_text = popup_link.text.strip()
 
-            for selector in title_selectors:
-                try:
-                    elem = driver.find_element(By.CSS_SELECTOR, selector)
-                    if elem and elem.text.strip():
-                        title = elem.text.strip()
-                        break
-                except NoSuchElementException:
-                    continue
+                # 클릭하여 팝업 열기
+                driver.execute_script("arguments[0].click();", popup_link)
+                time.sleep(1)  # 팝업 로딩 대기
 
-            # 내용 추출 시도
+            except NoSuchElementException:
+                logger.warning(f"⚠️ {category}/{question_id}: 팝업 링크 없음")
+                return None
+
+            # 3. 팝업 내용 추출
+            title = link_text  # 링크 텍스트가 제목
             content = None
+
+            # answerWrap 내용 추출 시도
             content_selectors = [
-                f"#{question_id} .answer-body",
-                f"#{question_id} .content",
-                f"#{question_id} p",
-                f"div[id='{question_id}'] .answer-body"
+                f"#{question_id} .answerWrap",
+                f"#{question_id} .answerLayer",
+                f"#{question_id}"
             ]
 
             for selector in content_selectors:
@@ -213,19 +211,15 @@ class BoardCrawler:
                 except NoSuchElementException:
                     continue
 
-            # 전체 팝업 텍스트로 fallback
-            if not title or not content:
-                try:
-                    popup_elem = driver.find_element(By.ID, question_id)
-                    full_text = popup_elem.text.strip()
-                    if full_text:
-                        lines = full_text.split('\n')
-                        if not title and lines:
-                            title = lines[0]
-                        if not content and len(lines) > 1:
-                            content = '\n'.join(lines[1:])
-                except NoSuchElementException:
-                    pass
+            # 4. 팝업 닫기 (다음 크롤링을 위해)
+            try:
+                close_btn = driver.find_element(By.CSS_SELECTOR, f"#{question_id} .close, #{question_id} .btn-close, .needpopup-close")
+                driver.execute_script("arguments[0].click();", close_btn)
+            except NoSuchElementException:
+                # ESC 키로 닫기 시도
+                from selenium.webdriver.common.keys import Keys
+                driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(0.3)
 
             if title or content:
                 logger.info(f"✅ {category}/{question_id}: {title[:30] if title else 'N/A'}...")
