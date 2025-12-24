@@ -100,6 +100,7 @@ def format_items_list(items_text: str) -> str:
 
     괄호 [], () 안의 콤마는 항목 구분자가 아니므로 무시
     카테고리 헤더 (매월 1회 이상), (제품 생산 단위별) 등은 bullet 없이 표시
+    부칙 (유탕·유처리식품에 한한다) 등은 이전 항목에 붙임
     """
     if not items_text:
         return items_text
@@ -135,6 +136,13 @@ def format_items_list(items_text: str) -> str:
     if current_item.strip():
         items.append(current_item.strip())
 
+    # 부칙 패턴 (조건/제한 - 이전 항목에 붙여야 함)
+    # 예: (유탕·유처리식품에 한한다), (살균제품에 한함), (발효제품은 제외한다)
+    def is_condition_note(text):
+        """부칙/조건인지 확인 - '한한다', '제외한다', '한함', '제외', '한하며' 등으로 끝나는 경우"""
+        endings = ('한한다)', '제외한다)', '한함)', '제외)', '한하며)', '제외하며)')
+        return text.endswith(endings)
+
     # 카테고리 헤더 패턴
     # 예: (매월 1회 이상), (제품 생산 단위별), (비살균 제품) 등
     category_only_pattern = re.compile(r'^\([^)]+\)$')  # 카테고리만 있는 경우
@@ -157,74 +165,112 @@ def format_items_list(items_text: str) -> str:
 
         # 카테고리 헤더만 있는 경우
         if category_only_pattern.match(formatted_item):
-            if formatted_items:
-                formatted_items.append("")
-            formatted_items.append(f"✏️ {formatted_item}")
+            # 부칙인지 확인 - 부칙이면 이전 항목에 붙임
+            if is_condition_note(formatted_item):
+                if formatted_items and formatted_items[-1].startswith("• "):
+                    # 이전 항목에 부칙 붙이기
+                    formatted_items[-1] = formatted_items[-1] + f"\n  {formatted_item}"
+                else:
+                    # 이전 항목이 없으면 그냥 추가
+                    formatted_items.append(f"  {formatted_item}")
+            else:
+                # 카테고리 헤더로 처리
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {formatted_item}")
         # 카테고리 헤더 + 항목이 붙어있는 경우 (예: "(비살균 제품)아질산이온")
         elif category_with_item_pattern.match(formatted_item):
             match = category_with_item_pattern.match(formatted_item)
             category_header = match.group(1)
             item_text = match.group(2).strip()
-            # 카테고리 헤더 추가
-            if formatted_items:
-                formatted_items.append("")
-            formatted_items.append(f"✏️ {category_header}")
-            # 항목 추가
-            if item_text:
-                formatted_items.append(f"• {item_text}")
+
+            # 부칙인지 확인
+            if is_condition_note(category_header):
+                # 부칙 + 항목인 경우 - 부칙을 이전 항목에 붙이고 항목은 새로 추가
+                if formatted_items and formatted_items[-1].startswith("• "):
+                    formatted_items[-1] = formatted_items[-1] + f"\n  {category_header}"
+                if item_text:
+                    formatted_items.append(f"• {item_text}")
+            else:
+                # 카테고리 헤더 추가
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {category_header}")
+                # 항목 추가
+                if item_text:
+                    formatted_items.append(f"• {item_text}")
         # 항목(설명)(카테고리) 다음항목 형태 (예: "탄화물(분말 제품에 한함)(제품 생산 단위별) 세균수")
         elif item_note_category_next_pattern.match(formatted_item):
             match = item_note_category_next_pattern.match(formatted_item)
             item_with_note = match.group(1).strip()
             category_header = match.group(2)
             next_item = match.group(3).strip()
-            # 이전 카테고리의 마지막 항목
-            if item_with_note:
-                formatted_items.append(f"• {item_with_note}")
-            # 새 카테고리 헤더
-            if formatted_items:
-                formatted_items.append("")
-            formatted_items.append(f"✏️ {category_header}")
-            # 새 카테고리의 첫 항목
-            if next_item:
-                formatted_items.append(f"• {next_item}")
+
+            # 두 번째 괄호가 부칙인지 카테고리인지 확인
+            if is_condition_note(category_header):
+                # 부칙이면 전체를 하나의 항목으로
+                formatted_items.append(f"• {item_with_note}\n  {category_header}")
+                if next_item:
+                    formatted_items.append(f"• {next_item}")
+            else:
+                # 이전 카테고리의 마지막 항목
+                if item_with_note:
+                    formatted_items.append(f"• {item_with_note}")
+                # 새 카테고리 헤더
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {category_header}")
+                # 새 카테고리의 첫 항목
+                if next_item:
+                    formatted_items.append(f"• {next_item}")
         # 항목 끝에 연속 괄호 2개 (예: "탄화물(설명)(카테고리)")
         elif double_paren_ending_pattern.match(formatted_item):
             match = double_paren_ending_pattern.match(formatted_item)
             item_with_note = match.group(1).strip()
             category_header = match.group(2)
-            # 이전 카테고리의 마지막 항목
-            if item_with_note:
-                formatted_items.append(f"• {item_with_note}")
-            # 새 카테고리 헤더
-            if formatted_items:
-                formatted_items.append("")
-            formatted_items.append(f"✏️ {category_header}")
+
+            # 두 번째 괄호가 부칙인지 카테고리인지 확인
+            if is_condition_note(category_header):
+                # 부칙이면 전체를 하나의 항목으로
+                formatted_items.append(f"• {item_with_note}\n  {category_header}")
+            else:
+                # 이전 카테고리의 마지막 항목
+                if item_with_note:
+                    formatted_items.append(f"• {item_with_note}")
+                # 새 카테고리 헤더
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {category_header}")
         # 항목 중간에 카테고리가 있는 경우 (예: "보존료(카테고리) 아질산이온")
         elif embedded_category_pattern.match(formatted_item):
             match = embedded_category_pattern.match(formatted_item)
             before_item = match.group(1).strip()
             category_header = match.group(2)
             after_item = match.group(3).strip()
-            # 이전 카테고리의 마지막 항목
-            if before_item:
-                formatted_items.append(f"• {before_item}")
-            # 새 카테고리 헤더
-            if formatted_items:
-                formatted_items.append("")
-            formatted_items.append(f"✏️ {category_header}")
-            # 새 카테고리의 첫 항목
-            if after_item:
-                formatted_items.append(f"• {after_item}")
+
+            # 괄호가 부칙인지 카테고리인지 확인
+            if is_condition_note(category_header):
+                # 부칙이면 하나의 항목으로 합침
+                formatted_items.append(f"• {before_item} {category_header} {after_item}")
+            else:
+                # 이전 카테고리의 마지막 항목
+                if before_item:
+                    formatted_items.append(f"• {before_item}")
+                # 새 카테고리 헤더
+                if formatted_items:
+                    formatted_items.append("")
+                formatted_items.append(f"✏️ {category_header}")
+                # 새 카테고리의 첫 항목
+                if after_item:
+                    formatted_items.append(f"• {after_item}")
         # 항목(괄호)로 끝나는 경우 - 괄호가 카테고리인지 설명인지 판단
         elif item_trailing_paren_pattern.match(formatted_item):
             match = item_trailing_paren_pattern.match(formatted_item)
             item_text = match.group(1).strip()
             paren_content = match.group(2)
-            # '한함)' 또는 '제외)'로 끝나면 설명 (분리 안함)
-            is_note = paren_content.endswith('한함)') or paren_content.endswith('제외)')
-            if is_note:
-                # 설명이면 전체를 하나의 항목으로
+            # 부칙인지 확인
+            if is_condition_note(paren_content):
+                # 부칙이면 전체를 하나의 항목으로
                 formatted_items.append(f"• {formatted_item}")
             else:
                 # 카테고리면 분리
