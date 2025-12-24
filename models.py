@@ -81,6 +81,25 @@ def init_database():
         )
     """)
 
+    # 게시판 매핑 테이블 (자연어 처리용)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS board_mappings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id TEXT NOT NULL UNIQUE,
+            category TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            title TEXT,
+            content TEXT,
+            keywords TEXT,
+            synonyms TEXT,
+            intent TEXT,
+            priority INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -589,6 +608,123 @@ def get_vision_api_remaining() -> int:
     """Vision API 남은 호출 횟수"""
     current_usage = get_api_usage("google_vision")
     return max(0, VISION_API_MONTHLY_LIMIT - current_usage)
+
+
+# ===== 게시판 매핑 관련 함수 (자연어 처리용) =====
+
+def save_board_mapping(question_id: str, category: str, base_url: str,
+                       title: str = None, content: str = None,
+                       keywords: str = None, synonyms: str = None,
+                       intent: str = None, priority: int = 0):
+    """게시판 매핑 저장 (기존 데이터 업데이트 또는 새로 추가)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO board_mappings (question_id, category, base_url, title, content,
+                                    keywords, synonyms, intent, priority, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(question_id)
+        DO UPDATE SET category = ?, base_url = ?, title = ?, content = ?,
+                      keywords = ?, synonyms = ?, intent = ?, priority = ?,
+                      updated_at = ?
+    """, (question_id, category, base_url, title, content, keywords, synonyms, intent, priority, datetime.now(),
+          category, base_url, title, content, keywords, synonyms, intent, priority, datetime.now()))
+
+    conn.commit()
+    conn.close()
+
+
+def get_board_mapping(question_id: str) -> dict:
+    """특정 게시판 매핑 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM board_mappings WHERE question_id = ? AND is_active = 1
+    """, (question_id,))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def search_board_by_keywords(search_text: str) -> list:
+    """키워드로 게시판 검색 (자연어 매칭)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 검색어를 단어로 분리
+    search_words = search_text.replace(",", " ").split()
+
+    results = []
+    for word in search_words:
+        word = word.strip()
+        if len(word) < 2:
+            continue
+
+        cursor.execute("""
+            SELECT *,
+                   CASE
+                       WHEN title LIKE ? THEN 10
+                       WHEN keywords LIKE ? THEN 8
+                       WHEN synonyms LIKE ? THEN 6
+                       WHEN content LIKE ? THEN 4
+                       ELSE 0
+                   END as match_score
+            FROM board_mappings
+            WHERE is_active = 1
+              AND (title LIKE ? OR keywords LIKE ? OR synonyms LIKE ? OR content LIKE ? OR category LIKE ?)
+            ORDER BY match_score DESC, priority DESC
+        """, (f"%{word}%", f"%{word}%", f"%{word}%", f"%{word}%",
+              f"%{word}%", f"%{word}%", f"%{word}%", f"%{word}%", f"%{word}%"))
+
+        for row in cursor.fetchall():
+            result_dict = dict(row)
+            # 중복 제거
+            if not any(r['question_id'] == result_dict['question_id'] for r in results):
+                results.append(result_dict)
+
+    conn.close()
+    return results[:10]  # 최대 10개
+
+
+def get_all_board_mappings(category: str = None) -> list:
+    """모든 게시판 매핑 조회 (카테고리 필터 가능)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if category:
+        cursor.execute("""
+            SELECT * FROM board_mappings WHERE category = ? AND is_active = 1
+            ORDER BY category, question_id
+        """, (category,))
+    else:
+        cursor.execute("""
+            SELECT * FROM board_mappings WHERE is_active = 1
+            ORDER BY category, question_id
+        """)
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def update_board_keywords(question_id: str, keywords: str, synonyms: str = None, intent: str = None):
+    """게시판 키워드 업데이트"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE board_mappings
+        SET keywords = ?, synonyms = ?, intent = ?, updated_at = ?
+        WHERE question_id = ?
+    """, (keywords, synonyms, intent, datetime.now(), question_id))
+
+    conn.commit()
+    conn.close()
 
 
 # 데이터베이스 초기화 실행
