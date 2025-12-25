@@ -140,8 +140,10 @@ def format_items_list(items_text: str) -> str:
     # 예: (유탕·유처리식품에 한한다), (살균제품에 한함), (발효제품은 제외한다)
     def is_condition_note(text):
         """부칙/조건인지 확인 - '한한다', '제외한다', '한함', '제외', '한하며' 등으로 끝나는 경우"""
+        # 띄어쓰기 제거 후 확인 (제외 한다 -> 제외한다)
+        text_no_space = text.replace(" ", "")
         endings = ('한한다)', '제외한다)', '한함)', '제외)', '한하며)', '제외하며)')
-        return text.endswith(endings)
+        return text_no_space.endswith(endings)
 
     # 카테고리 헤더 패턴
     # 예: (매월 1회 이상), (제품 생산 단위별), (비살균 제품) 등
@@ -168,11 +170,11 @@ def format_items_list(items_text: str) -> str:
             # 부칙인지 확인 - 부칙이면 이전 항목에 붙임
             if is_condition_note(formatted_item):
                 if formatted_items and formatted_items[-1].startswith("• "):
-                    # 이전 항목에 부칙 붙이기
-                    formatted_items[-1] = formatted_items[-1] + f"\n  {formatted_item}"
+                    # 이전 항목에 부칙 직접 붙이기 (같은 줄)
+                    formatted_items[-1] = formatted_items[-1] + formatted_item
                 else:
                     # 이전 항목이 없으면 그냥 추가
-                    formatted_items.append(f"  {formatted_item}")
+                    formatted_items.append(f"✓ {formatted_item}")
             else:
                 # 카테고리 헤더로 처리
                 if formatted_items:
@@ -186,9 +188,9 @@ def format_items_list(items_text: str) -> str:
 
             # 부칙인지 확인
             if is_condition_note(category_header):
-                # 부칙 + 항목인 경우 - 부칙을 이전 항목에 붙이고 항목은 새로 추가
+                # 부칙 + 항목인 경우 - 부칙을 이전 항목에 직접 붙이고 항목은 새로 추가
                 if formatted_items and formatted_items[-1].startswith("• "):
-                    formatted_items[-1] = formatted_items[-1] + f"\n  {category_header}"
+                    formatted_items[-1] = formatted_items[-1] + category_header
                 if item_text:
                     formatted_items.append(f"• {item_text}")
             else:
@@ -208,8 +210,8 @@ def format_items_list(items_text: str) -> str:
 
             # 두 번째 괄호가 부칙인지 카테고리인지 확인
             if is_condition_note(category_header):
-                # 부칙이면 전체를 하나의 항목으로
-                formatted_items.append(f"• {item_with_note}\n  {category_header}")
+                # 부칙이면 전체를 하나의 항목으로 (같은 줄)
+                formatted_items.append(f"• {item_with_note}{category_header}")
                 if next_item:
                     formatted_items.append(f"• {next_item}")
             else:
@@ -231,8 +233,8 @@ def format_items_list(items_text: str) -> str:
 
             # 두 번째 괄호가 부칙인지 카테고리인지 확인
             if is_condition_note(category_header):
-                # 부칙이면 전체를 하나의 항목으로
-                formatted_items.append(f"• {item_with_note}\n  {category_header}")
+                # 부칙이면 전체를 하나의 항목으로 (같은 줄)
+                formatted_items.append(f"• {item_with_note}{category_header}")
             else:
                 # 이전 카테고리의 마지막 항목
                 if item_with_note:
