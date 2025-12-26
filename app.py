@@ -1475,7 +1475,6 @@ def chatbot():
 
             # 2단계: 원재료 일괄 입력
             if step == "원재료_일괄입력":
-                import re
                 total_weight = user_data.get("총중량")
 
                 # 콤마 또는 줄바꿈으로 분리
