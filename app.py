@@ -1182,6 +1182,8 @@ def chatbot():
                     # 남은 횟수 소진 -> NLP 모드 종료
                     user_data.pop("nlp_모드", None)
                     user_data.pop("nlp_검색결과", None)
+                    user_data.pop("nlp_전체결과", None)
+                    user_data.pop("nlp_현재페이지", None)
                     user_data.pop("nlp_남은횟수", None)
                     user_data.pop("nlp_선택", None)
                     user_data.pop("nlp_선택완료", None)
@@ -2973,6 +2975,41 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
         # ===== NLP 모드: 번호 선택 처리 =====
         if user_data.get("nlp_모드"):
             nlp_results = user_data.get("nlp_검색결과", [])
+            all_results = user_data.get("nlp_전체결과", [])
+
+            # "더보기" 처리
+            if user_input == "더보기":
+                page_size = 5
+                current_page = user_data.get("nlp_현재페이지", 0) + 1
+                user_data["nlp_현재페이지"] = current_page
+
+                start_idx = current_page * page_size
+                end_idx = start_idx + page_size
+                page_results = all_results[start_idx:end_idx]
+
+                if page_results:
+                    user_data["nlp_검색결과"] = page_results
+                    user_data["nlp_남은횟수"] = len(page_results)
+
+                    response_text = f"🔍 추가 검색 결과 ({start_idx + 1}~{start_idx + len(page_results)}번):\n\n"
+                    buttons = []
+                    for i, r in enumerate(page_results, 1):
+                        title_short = r['title'][:35] + "..." if len(r['title']) > 35 else r['title']
+                        response_text += f"{i}. {title_short}\n"
+                        buttons.append(str(i))
+
+                    response_text += "\n번호를 선택해주세요."
+
+                    # 더 많은 결과가 있으면 "더보기" 버튼 추가
+                    if len(all_results) > end_idx:
+                        buttons.append("더보기")
+                        response_text += f"\n(총 {len(all_results)}개 중 {start_idx + 1}~{start_idx + len(page_results)}번)"
+
+                    buttons.append("처음으로")
+                    return make_response(response_text, buttons)
+                else:
+                    response_text = "더 이상 검색 결과가 없습니다."
+                    return make_response(response_text, ["처음으로"])
 
             # 숫자 입력 확인
             if user_input.isdigit():
@@ -3011,6 +3048,8 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                         # NLP 모드 종료
                         user_data.pop("nlp_모드", None)
                         user_data.pop("nlp_검색결과", None)
+                        user_data.pop("nlp_전체결과", None)
+                        user_data.pop("nlp_현재페이지", None)
                         user_data.pop("nlp_남은횟수", None)
                         user_data.pop("nlp_선택", None)
                         user_data.pop("nlp_선택완료", None)
@@ -3033,25 +3072,41 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
             menu_keywords = ["검사분야", "검사주기", "검사항목", "자가품질검사", "영양성분검사",
                             "식품", "축산", "배합 함량", "당알코올 계산", "표시대상확인"]
             if user_input not in menu_keywords:
-                nlp_results = search_qa_by_query(user_input, top_n=5, min_score=2)
+                nlp_results = search_qa_by_query(user_input, top_n=15, min_score=2)  # 최대 15개 검색
 
                 if nlp_results:
                     logger.info(f"[{user_id}] NLP 검색 결과: {len(nlp_results)}개")
 
                     # NLP 모드 시작
                     user_data["nlp_모드"] = True
-                    user_data["nlp_검색결과"] = nlp_results
-                    user_data["nlp_남은횟수"] = len(nlp_results)  # 결과 수만큼 이전 횟수 제공
+                    user_data["nlp_전체결과"] = nlp_results  # 전체 결과 저장
+                    user_data["nlp_현재페이지"] = 0  # 현재 페이지 (0부터 시작)
                     user_data["nlp_선택완료"] = []
+
+                    # 첫 페이지 5개 표시
+                    page_size = 5
+                    current_page = 0
+                    start_idx = current_page * page_size
+                    end_idx = start_idx + page_size
+                    page_results = nlp_results[start_idx:end_idx]
+
+                    user_data["nlp_검색결과"] = page_results
+                    user_data["nlp_남은횟수"] = len(page_results)
 
                     response_text = "🔍 관련 Q&A를 찾았습니다:\n\n"
                     buttons = []
-                    for i, r in enumerate(nlp_results, 1):
+                    for i, r in enumerate(page_results, 1):
                         title_short = r['title'][:35] + "..." if len(r['title']) > 35 else r['title']
                         response_text += f"{i}. {title_short}\n"
                         buttons.append(str(i))
 
                     response_text += "\n번호를 선택해주세요."
+
+                    # 더 많은 결과가 있으면 "더보기" 버튼 추가
+                    if len(nlp_results) > end_idx:
+                        buttons.append("더보기")
+                        response_text += f"\n(총 {len(nlp_results)}개 중 1~{len(page_results)}번)"
+
                     buttons.append("처음으로")
 
                     return make_response(response_text, buttons)
