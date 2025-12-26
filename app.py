@@ -2800,6 +2800,9 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
             save_to_history(user_data)  # 히스토리 저장
             user_data["분야"] = user_input
 
+            # 식품유형 힌트 확인
+            food_hint = user_data.get("식품유형_힌트")
+
             if user_data["기능"] == "검사주기":
                 # 검사주기: 업종 선택 필요
                 if user_input == "식품":
@@ -2812,10 +2815,10 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                 )
             else:
                 # 검사항목: 바로 식품 유형 입력
-                return make_response(
-                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)",
-                    ["이전", "처음으로"]
-                )
+                msg = f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)"
+                if food_hint:
+                    msg += f"\n\n💡 '{food_hint}'(으)로 검색하시려면 그대로 입력해주세요."
+                return make_response(msg, ["이전", "처음으로"])
 
         # Step 3: 업종 선택 (검사주기만 해당)
         if user_input in ["식품제조가공업", "즉석판매제조가공업", "축산물제조가공업", "축산물즉석판매제조가공업"]:
@@ -2828,12 +2831,14 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
             save_to_history(user_data)  # 히스토리 저장
             user_data["업종"] = user_input
 
+            # 식품유형 힌트 확인
+            food_hint = user_data.get("식품유형_힌트")
+            hint_msg = f"\n\n💡 '{food_hint}'(으)로 검색하시려면 그대로 입력해주세요." if food_hint else ""
+
             # 식품제조가공업, 축산물제조가공업은 품목제조보고서 주의 메시지
             if user_input in ["식품제조가공업", "축산물제조가공업"]:
-                return make_response(
-                    f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)",
-                    ["이전", "처음으로"]
-                )
+                msg = f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)"
+                return make_response(msg + hint_msg, ["이전", "처음으로"])
             elif user_input == "즉석판매제조가공업":
                 # 즉석판매제조가공업은 영업신고증 주의 메시지 + 바로가기 버튼
                 message = f"[{user_input}] 검사할 식품 유형을 입력해주세요.\n\n"
@@ -2841,6 +2846,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                 message += "(주의 : 영업신고증에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요.)\n\n"
                 message += "* 주의 즉석판매제조가공업은 영업등록증에 표기된 식품의 유형만 자가품질검사 대상이 됩니다.\n\n"
                 message += "대상은 바로가기 버튼을 클릭하여 Q5. [즉석판매제조가공업] 자가품질검사 대상식품 및 검사주기를 참고해주세요."
+                message += hint_msg
                 return make_response_with_link(
                     message,
                     "바로가기",
@@ -2853,6 +2859,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                 message += "예: 과자, 음료, 소시지 등\n\n"
                 message += "(주의 : 신고필증에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요.)\n\n"
                 message += "* 주의 축산물즉석판매제조가공업은 신고필증에 표기된 식품의 유형을 확인해주시고 바로가기 버튼을 클릭하여 \"Q5. [식육즉석판매가공업] 자가품질검사 대상식품 및 검사주기\"를 참고해 주세요."
+                message += hint_msg
                 return make_response_with_link(
                     message,
                     "바로가기",
@@ -3214,44 +3221,21 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                 food_type_candidate = item_pattern.group(1).strip()
                 target_function = "검사항목"
 
-            # 일반적인 단어인 경우 분야 선택부터 시작
+            # 일반적인 단어 필터링
             generic_words = ["유형", "식품", "축산", "의", "에", "를", "을", ""]
-            if not food_type_candidate or food_type_candidate in generic_words or len(food_type_candidate) < 2:
-                # 분야 선택 화면으로 이동
-                user_data["기능"] = target_function
-                return make_response(
-                    f"📋 {target_function} 조회\n\n분야를 선택해주세요.",
-                    ["식품", "축산", "이전", "처음으로"]
-                )
 
-            # 특정 식품유형이 있는 경우
-            # 식품/축산 분야 판단
-            if any(kw in user_input for kw in ["축산", "햄", "소시지", "베이컨", "육가공"]):
-                field = "축산"
-            else:
-                field = "식품"
-
+            # 기능 설정
             user_data["기능"] = target_function
-            user_data["분야"] = field
 
-            if target_function == "검사주기":
-                # 검사주기는 업종 선택 필요
-                if field == "식품":
-                    return make_response(
-                        f"📋 '{food_type_candidate}'의 검사주기를 조회합니다.\n\n업종을 선택해주세요.",
-                        ["식품제조가공업", "즉석판매제조가공업", "이전", "처음으로"]
-                    )
-                else:
-                    return make_response(
-                        f"📋 '{food_type_candidate}'의 검사주기를 조회합니다.\n\n업종을 선택해주세요.",
-                        ["축산물제조가공업", "축산물즉석판매제조가공업", "이전", "처음으로"]
-                    )
-            else:
-                # 검사항목은 바로 식품유형 입력 대기
-                return make_response(
-                    f"[{field}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)\n\n💡 '{food_type_candidate}'(으)로 검색하시려면 그대로 입력해주세요.",
-                    ["이전", "처음으로"]
-                )
+            # 유효한 식품유형이 있으면 힌트로 저장
+            if food_type_candidate and food_type_candidate not in generic_words and len(food_type_candidate) >= 2:
+                user_data["식품유형_힌트"] = food_type_candidate
+
+            # 항상 분야 선택부터 시작
+            return make_response(
+                f"📋 {target_function} 조회\n\n분야를 선택해주세요.",
+                ["식품", "축산", "이전", "처음으로"]
+            )
 
         # ===== NLP 검색 (자연어 질문 처리) =====
         if NLP_AVAILABLE and len(user_input) >= 5:
