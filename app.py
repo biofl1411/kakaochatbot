@@ -95,12 +95,14 @@ def format_korean_spacing(text: str) -> str:
     return result
 
 
-def format_items_list(items_text: str) -> str:
+def format_items_list(items_text: str, category: str = "식품") -> str:
     """콤마로 구분된 항목들을 줄바꿈된 리스트 형식으로 변환
 
     괄호 [], () 안의 콤마는 항목 구분자가 아니므로 무시
     카테고리 헤더 (매월 1회 이상), (제품 생산 단위별) 등은 bullet 없이 표시
-    부칙 (유탕·유처리식품에 한한다) 등은 이전 항목에 붙임
+    부칙 (유탕·유처리식품에 한한다) 등:
+      - 식품: 이전 항목에 같은 줄로 붙임
+      - 축산: 별도 줄에 표시 (✏️ 포함)
     """
     if not items_text:
         return items_text
@@ -169,12 +171,17 @@ def format_items_list(items_text: str) -> str:
         if category_only_pattern.match(formatted_item):
             # 부칙인지 확인 - 부칙이면 이전 항목에 붙임
             if is_condition_note(formatted_item):
-                if formatted_items and formatted_items[-1].startswith("• "):
-                    # 이전 항목에 부칙 직접 붙이기 (같은 줄)
-                    formatted_items[-1] = formatted_items[-1] + formatted_item
+                if category == "식품":
+                    # 식품: 이전 항목에 부칙 직접 붙이기 (같은 줄)
+                    if formatted_items and formatted_items[-1].startswith("• "):
+                        formatted_items[-1] = formatted_items[-1] + formatted_item
+                    else:
+                        formatted_items.append(f"✓ {formatted_item}")
                 else:
-                    # 이전 항목이 없으면 그냥 추가
-                    formatted_items.append(f"✓ {formatted_item}")
+                    # 축산 등: 별도 줄에 ✏️와 함께 표시
+                    if formatted_items:
+                        formatted_items.append("")
+                    formatted_items.append(f"✏️ {formatted_item}")
             else:
                 # 카테고리 헤더로 처리
                 if formatted_items:
@@ -188,11 +195,19 @@ def format_items_list(items_text: str) -> str:
 
             # 부칙인지 확인
             if is_condition_note(category_header):
-                # 부칙 + 항목인 경우 - 부칙을 이전 항목에 직접 붙이고 항목은 새로 추가
-                if formatted_items and formatted_items[-1].startswith("• "):
-                    formatted_items[-1] = formatted_items[-1] + category_header
-                if item_text:
-                    formatted_items.append(f"• {item_text}")
+                if category == "식품":
+                    # 식품: 부칙을 이전 항목에 직접 붙이고 항목은 새로 추가
+                    if formatted_items and formatted_items[-1].startswith("• "):
+                        formatted_items[-1] = formatted_items[-1] + category_header
+                    if item_text:
+                        formatted_items.append(f"• {item_text}")
+                else:
+                    # 축산 등: 별도 줄에 ✏️와 함께 표시
+                    if formatted_items:
+                        formatted_items.append("")
+                    formatted_items.append(f"✏️ {category_header}")
+                    if item_text:
+                        formatted_items.append(f"• {item_text}")
             else:
                 # 카테고리 헤더 추가
                 if formatted_items:
@@ -210,8 +225,14 @@ def format_items_list(items_text: str) -> str:
 
             # 두 번째 괄호가 부칙인지 카테고리인지 확인
             if is_condition_note(category_header):
-                # 부칙이면 전체를 하나의 항목으로 (같은 줄)
-                formatted_items.append(f"• {item_with_note}{category_header}")
+                if category == "식품":
+                    # 식품: 부칙이면 전체를 하나의 항목으로 (같은 줄)
+                    formatted_items.append(f"• {item_with_note}{category_header}")
+                else:
+                    # 축산 등: 별도 줄에 표시
+                    formatted_items.append(f"• {item_with_note}")
+                    formatted_items.append("")
+                    formatted_items.append(f"✏️ {category_header}")
                 if next_item:
                     formatted_items.append(f"• {next_item}")
             else:
@@ -233,8 +254,14 @@ def format_items_list(items_text: str) -> str:
 
             # 두 번째 괄호가 부칙인지 카테고리인지 확인
             if is_condition_note(category_header):
-                # 부칙이면 전체를 하나의 항목으로 (같은 줄)
-                formatted_items.append(f"• {item_with_note}{category_header}")
+                if category == "식품":
+                    # 식품: 부칙이면 전체를 하나의 항목으로 (같은 줄)
+                    formatted_items.append(f"• {item_with_note}{category_header}")
+                else:
+                    # 축산 등: 별도 줄에 표시
+                    formatted_items.append(f"• {item_with_note}")
+                    formatted_items.append("")
+                    formatted_items.append(f"✏️ {category_header}")
             else:
                 # 이전 카테고리의 마지막 항목
                 if item_with_note:
@@ -2561,7 +2588,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                     result = get_inspection_item(user_data["분야"], food_type)
                     if result:
                         user_data["실패횟수"] = 0
-                        formatted_items = format_items_list(result['items'])
+                        formatted_items = format_items_list(result['items'], user_data["분야"])
                         response_text = f"📷 이미지에서 '{food_type}'을(를) 찾았습니다.\n\n"
                         response_text += f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                         response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
@@ -2774,7 +2801,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                     # 1개 매칭 시 바로 결과 표시
                     result = all_matches[0]
                     user_data["실패횟수"] = 0
-                    formatted_items = format_items_list(result['items'])
+                    formatted_items = format_items_list(result['items'], user_data["분야"])
                     response_text = f"✅ [{result['food_type']}]의 검사 항목:\n\n{formatted_items}"
                     response_text += f"\n\n📌 다른 식품 유형을 입력하거나, [종료]를 눌러주세요."
                     return make_response(response_text, ["종료"])
