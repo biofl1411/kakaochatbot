@@ -35,6 +35,16 @@ except ImportError as e:
     def is_vision_api_available():
         return False
 
+# NLP 검색 기능 import
+try:
+    from nlp_keywords import search_qa_by_query
+    NLP_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"NLP 모듈 로드 실패: {e}")
+    NLP_AVAILABLE = False
+    def search_qa_by_query(query, top_n=3, min_score=1):
+        return []
+
 # 로깅 설정
 logging.basicConfig(
     level=logging.INFO,
@@ -1144,6 +1154,42 @@ def chatbot():
 
         # "이전" 버튼 처리
         if user_input == "이전":
+            # NLP 모드에서 이전 -> 검색 결과 목록으로
+            if user_data.get("nlp_모드"):
+                nlp_results = user_data.get("nlp_검색결과", [])
+                nlp_remaining = user_data.get("nlp_남은횟수", 0)
+
+                if nlp_remaining > 0 and nlp_results:
+                    user_data["nlp_남은횟수"] = nlp_remaining - 1
+                    user_data.pop("nlp_선택", None)
+
+                    # 선택 완료된 항목 표시
+                    selected_list = user_data.get("nlp_선택완료", [])
+
+                    response_text = "🔍 검색 결과 목록:\n\n"
+                    buttons = []
+                    for i, r in enumerate(nlp_results, 1):
+                        title_short = r['title'][:35] + "..." if len(r['title']) > 35 else r['title']
+                        mark = " ✓" if i in selected_list else ""
+                        response_text += f"{i}. {title_short}{mark}\n"
+                        buttons.append(str(i))
+
+                    response_text += f"\n번호를 선택해주세요. (남은 선택: {user_data['nlp_남은횟수']}회)"
+                    buttons.extend(["처음으로"])
+
+                    return make_response(response_text, buttons)
+                else:
+                    # 남은 횟수 소진 -> NLP 모드 종료
+                    user_data.pop("nlp_모드", None)
+                    user_data.pop("nlp_검색결과", None)
+                    user_data.pop("nlp_남은횟수", None)
+                    user_data.pop("nlp_선택", None)
+                    user_data.pop("nlp_선택완료", None)
+                    return make_response(
+                        "검색이 종료되었습니다.\n\n원하시는 서비스를 선택해주세요.",
+                        ["검사분야", "검사주기", "검사항목"]
+                    )
+
             # 계산 모드에서 이전 -> 함량계산 메뉴로
             if user_data.get("계산_모드"):
                 user_data.pop("계산_모드", None)
@@ -2923,6 +2969,92 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                             response_text += f"\n\n🔍 유사한 항목: {', '.join(similar)}"
 
                     return make_response(response_text, ["종료"])
+
+        # ===== NLP 모드: 번호 선택 처리 =====
+        if user_data.get("nlp_모드"):
+            nlp_results = user_data.get("nlp_검색결과", [])
+
+            # 숫자 입력 확인
+            if user_input.isdigit():
+                selected_idx = int(user_input)
+                if 1 <= selected_idx <= len(nlp_results):
+                    selected_qa = nlp_results[selected_idx - 1]
+
+                    # 선택 완료 목록에 추가
+                    if "nlp_선택완료" not in user_data:
+                        user_data["nlp_선택완료"] = []
+                    if selected_idx not in user_data["nlp_선택완료"]:
+                        user_data["nlp_선택완료"].append(selected_idx)
+
+                    user_data["nlp_선택"] = selected_idx
+
+                    # 답변 표시
+                    title = selected_qa.get("title", "")
+                    content = selected_qa.get("content", "")
+                    category = selected_qa.get("category", "")
+
+                    # 답변 텍스트 구성 (최대 1000자)
+                    response_text = f"📌 [{category}] {title}\n\n"
+                    if content:
+                        if len(content) > 900:
+                            response_text += content[:900] + "...\n\n(전체 내용은 홈페이지를 참고해주세요)"
+                        else:
+                            response_text += content
+
+                    remaining = user_data.get("nlp_남은횟수", 0)
+                    if remaining > 0:
+                        response_text += f"\n\n💡 원하시는 답변이 아니라면 [이전]을 눌러주세요. (남은 횟수: {remaining}회)"
+                        buttons = ["이전", "처음으로"]
+                    else:
+                        response_text += "\n\n검색이 완료되었습니다."
+                        buttons = ["처음으로"]
+                        # NLP 모드 종료
+                        user_data.pop("nlp_모드", None)
+                        user_data.pop("nlp_검색결과", None)
+                        user_data.pop("nlp_남은횟수", None)
+                        user_data.pop("nlp_선택", None)
+                        user_data.pop("nlp_선택완료", None)
+
+                    return make_response(response_text, buttons)
+
+            # 잘못된 입력
+            response_text = "번호를 다시 선택해주세요.\n\n"
+            buttons = []
+            for i, r in enumerate(nlp_results, 1):
+                title_short = r['title'][:35] + "..." if len(r['title']) > 35 else r['title']
+                response_text += f"{i}. {title_short}\n"
+                buttons.append(str(i))
+            buttons.append("처음으로")
+            return make_response(response_text, buttons)
+
+        # ===== NLP 검색 (자연어 질문 처리) =====
+        if NLP_AVAILABLE and len(user_input) >= 5:
+            # 메뉴 키워드가 아닌 경우에만 NLP 검색
+            menu_keywords = ["검사분야", "검사주기", "검사항목", "자가품질검사", "영양성분검사",
+                            "식품", "축산", "배합 함량", "당알코올 계산", "표시대상확인"]
+            if user_input not in menu_keywords:
+                nlp_results = search_qa_by_query(user_input, top_n=5, min_score=2)
+
+                if nlp_results:
+                    logger.info(f"[{user_id}] NLP 검색 결과: {len(nlp_results)}개")
+
+                    # NLP 모드 시작
+                    user_data["nlp_모드"] = True
+                    user_data["nlp_검색결과"] = nlp_results
+                    user_data["nlp_남은횟수"] = len(nlp_results)  # 결과 수만큼 이전 횟수 제공
+                    user_data["nlp_선택완료"] = []
+
+                    response_text = "🔍 관련 Q&A를 찾았습니다:\n\n"
+                    buttons = []
+                    for i, r in enumerate(nlp_results, 1):
+                        title_short = r['title'][:35] + "..." if len(r['title']) > 35 else r['title']
+                        response_text += f"{i}. {title_short}\n"
+                        buttons.append(str(i))
+
+                    response_text += "\n번호를 선택해주세요."
+                    buttons.append("처음으로")
+
+                    return make_response(response_text, buttons)
 
         # 기본 응답
         return make_response(
