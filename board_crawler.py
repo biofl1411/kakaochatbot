@@ -32,93 +32,91 @@ BOARD_CONFIG = {
     "표시기준": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=EJ2GKW3",
         "questions": [
-            "question_161", "question_162", "question_163", "question_164",
-            "question_165", "question_166", "question_167", "question_168",
-            "question_169", "question_170", "question_171", "question_172",
-            "question_173", "question_174", "question_175", "question_176",
-            "question_177"
+            "question_161", "question_217", "question_101", "question_103",
+            "question_222", "question_105", "question_100", "question_104",
+            "question_219", "question_221", "question_218", "question_220",
+            "question_212", "question_213", "question_216", "question_214",
+            "question_167"
         ]
     },
     "잔류농약_항생물질": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=MKJ9PKO0",
         "questions": [
-            "question_82", "question_83", "question_84", "question_85",
-            "question_86", "question_87", "question_88", "question_89",
-            "question_90", "question_91", "question_92", "question_93"
+            "question_82", "question_83", "question_85", "question_84",
+            "question_87", "question_88", "question_89", "question_90",
+            "question_91", "question_93", "question_154", "question_166"
         ]
     },
     "방사능": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=HY5KJJJI",
         "questions": [
-            "question_37", "question_38", "question_39", "question_40",
-            "question_41", "question_42", "question_43", "question_44"
+            "question_37", "question_38", "question_39", "question_42",
+            "question_43", "question_44", "question_46", "question_47"
         ]
     },
     "영양성분": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=JEKb3KXA",
         "questions": [
-            "question_68", "question_69", "question_70", "question_71",
-            "question_72", "question_73", "question_74", "question_75",
-            "question_76", "question_77", "question_78", "question_79",
-            "question_80", "question_81", "question_207", "question_208",
-            "question_209", "question_210", "question_211", "question_212",
-            "question_213", "question_214", "question_215", "question_216",
-            "question_217"
+            "question_207", "question_78", "question_148", "question_193",
+            "question_192", "question_80", "question_79", "question_173",
+            "question_172", "question_174", "question_170", "question_182",
+            "question_171", "question_175", "question_176", "question_177",
+            "question_178", "question_180", "question_181", "question_245",
+            "question_179", "question_183", "question_169", "question_81",
+            "question_164"
         ]
     },
     "소비기한": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=PXXBybSV",
         "questions": [
-            "question_94", "question_95", "question_96", "question_97",
-            "question_98"
+            "question_94", "question_97", "question_95", "question_98",
+            "question_99"
         ]
     },
     "알레르기": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=G7K3Y2F9",
         "questions": [
-            "question_26", "question_27", "question_28", "question_29",
-            "question_30", "question_31", "question_32", "question_33",
-            "question_34", "question_35", "question_36", "question_176",
-            "question_177", "question_178", "question_179", "question_180",
-            "question_181", "question_182", "question_183"
+            "question_26", "question_27", "question_156", "question_28",
+            "question_29", "question_31", "question_151", "question_251",
+            "question_153", "question_32", "question_152", "question_35",
+            "question_157", "question_231", "question_250", "question_33",
+            "question_34", "question_160", "question_30"
         ]
     },
     "이물": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=H5R6T8B3",
         "questions": [
-            "question_122", "question_123", "question_124", "question_125",
-            "question_126", "question_127", "question_128", "question_138",
-            "question_159", "question_187", "question_188"
+            "question_122", "question_159", "question_136", "question_139",
+            "question_134", "question_187", "question_135", "question_138",
+            "question_140"
         ]
     },
     "비건_할랄_동물DNA": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=D4P8L2M7",
         "questions": [
-            "question_52", "question_53", "question_54", "question_55",
-            "question_56", "question_57", "question_58", "question_59",
-            "question_60", "question_61", "question_62"
+            "question_184", "question_124", "question_185", "question_126",
+            "question_125", "question_186", "question_127", "question_128",
+            "question_130", "question_188"
         ]
     },
     "축산": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=XN0Cd4r7",
         "questions": [
-            "question_99", "question_100", "question_101", "question_102",
-            "question_103", "question_104", "question_105", "question_106",
-            "question_107", "question_108", "question_109", "question_110",
-            "question_111", "question_112", "question_113", "question_114",
-            "question_115", "question_116", "question_117", "question_118",
-            "question_119", "question_120"
+            "question_66", "question_202", "question_209", "question_203",
+            "question_204", "question_72", "question_69", "question_205",
+            "question_71", "question_163", "question_206", "question_73",
+            "question_74", "question_76", "question_240", "question_243",
+            "question_246"
         ]
     },
     "식품": {
         "base_url": "https://www.biofl.co.kr/sub.jsp?code=7r9P7y94",
         "questions": [
-            "question_48", "question_50", "question_51", "question_53",
-            "question_56", "question_57", "question_60", "question_62",
-            "question_63", "question_64", "question_65", "question_162",
-            "question_191", "question_198", "question_199", "question_201",
-            "question_208", "question_228", "question_229", "question_236",
-            "question_239", "question_241"
+            "question_48", "question_199", "question_208", "question_64",
+            "question_63", "question_198", "question_162", "question_60",
+            "question_53", "question_201", "question_62", "question_56",
+            "question_57", "question_51", "question_50", "question_65",
+            "question_236", "question_239", "question_241"
         ]
     }
 }
