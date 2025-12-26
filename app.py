@@ -3099,17 +3099,43 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                     "💰 검사 수수료 안내입니다.\n\n검사 수수료는 식품유형, 살균여부, 보관방법 등에 따라 검사항목과 비용이 달라집니다.\n\n정확한 비용 확인을 위해 [검사항목] 메뉴를 이용해주세요.",
                     ["검사항목", "처음으로"]
                 )
-            elif user_input in ["5대 영양성분", "9대 영양성분", "14대 영양성분"]:
-                # 비용문의_모드 유지 (이전 버튼용)
+            elif user_input in ["9대 영양성분", "14대 영양성분"]:
+                # 기존 영양성분검사 로직으로 연결
+                user_data.pop("비용문의_모드", None)
+                user_data.pop("비용문의_분야", None)
+                user_data["영양성분_검사종류"] = True
+                user_data["검사분야_메뉴"] = "영양성분검사"
+
+                # 기존 9대/14대 로직 실행 (위의 코드에서 처리됨)
+                url_key = user_input.replace(" ", "")
+                detail_url = URL_MAPPING.get("영양성분검사", {}).get(url_key)
+                db_data = get_nutrition_info("영양성분검사", url_key)
+
+                if db_data and db_data.get("details"):
+                    formatted_data = format_nutrition_component_data(db_data['details'])
+                    response_text = f"💰 {user_input} 검사비용\n\n{formatted_data}"
+                else:
+                    response_text = f"💰 {user_input} 검사비용\n\n자세한 내용은 아래 링크를 확인해주세요."
+
+                if detail_url:
+                    return make_response_with_link(
+                        response_text,
+                        get_question_label("영양성분검사", url_key),
+                        detail_url,
+                        ["이전", "처음으로"]
+                    )
+                else:
+                    return make_response(response_text, ["이전", "처음으로"])
+            elif user_input == "5대 영양성분":
+                # 5대 영양성분은 크롤링 데이터 사용
                 user_data["비용문의_분야"] = "영양성분"
 
-                # 영양성분 비용 정보 제공 (하드코딩 - 추후 DB 연동 권장)
-                nutrition_costs = {
-                    "5대 영양성분": "💰 5대 영양성분 검사비용\n\n• 항목: 열량, 탄수화물, 당류, 단백질, 지방\n• 수수료: 150,000원\n• 소요기간: 약 5영업일\n\n※ 출처: 바이오푸드랩 홈페이지",
-                    "9대 영양성분": "💰 9대 영양성분 검사비용\n\n• 항목: 열량, 탄수화물, 당류, 단백질, 지방, 포화지방, 트랜스지방, 콜레스테롤, 나트륨\n• 수수료: 250,000원\n• 소요기간: 약 7영업일\n\n※ 출처: 바이오푸드랩 홈페이지",
-                    "14대 영양성분": "💰 14대 영양성분 검사비용\n\n• 항목: 9대 + 식이섬유, 비타민D, 칼슘, 철, 칼륨\n• 수수료: 350,000원\n• 소요기간: 약 7영업일\n\n※ 긴급검사 시 추가 수수료 발생\n※ 출처: 바이오푸드랩 홈페이지"
-                }
-                response_text = nutrition_costs.get(user_input, "비용 정보를 찾을 수 없습니다.")
+                response_text = "💰 5대 영양성분 검사비용\n\n"
+                response_text += "• 종류: 어린이기호식품 5대\n"
+                response_text += "• 항목: 열량, 당류, 단백질, 포화지방, 나트륨\n"
+                response_text += "• 수수료: 150,000원 (부가세 별도)\n"
+                response_text += "• 소요기간: 영업일 기준 12일"
+
                 return make_response(response_text, ["이전", "처음으로"])
             elif user_input == "이전":
                 # 비용문의_분야가 영양성분이면 영양성분 목록으로
