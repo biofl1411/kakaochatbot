@@ -1369,9 +1369,6 @@ def chatbot():
             user_data["계산_모드"] = "배합함량"
             user_data["계산_단계"] = "총중량_입력"
             user_data.pop("현재_메뉴", None)
-            user_data.pop("원재료_목록", None)
-            user_data.pop("원재료_개수", None)
-            user_data.pop("현재_원재료_순서", None)
 
             response_text = """📊 배합 함량(%) 계산
 
@@ -1383,12 +1380,10 @@ def chatbot():
 원재료 중량 ÷ 총 중량 × 100 = 배합 함량(%)
 
 ━━━━━━━━━━━━━━━
-📝 예시
+📝 입력 예시
 ━━━━━━━━━━━━━━━
-총 중량: 120g
-• 케첩 60g → 50%
-• 물엿 20g → 16.67%
-• 기타 40g → 33.33%
+1️⃣ 총 중량: 120
+2️⃣ 원재료: 케첩 60, 물엿 20, 기타 40
 
 ━━━━━━━━━━━━━━━
 🔢 계산을 시작합니다!
@@ -1404,9 +1399,6 @@ def chatbot():
             if user_input == "배합 함량":
                 user_data["계산_단계"] = "총중량_입력"
                 user_data.pop("총중량", None)
-                user_data.pop("원재료_목록", None)
-                user_data.pop("원재료_개수", None)
-                user_data.pop("현재_원재료_순서", None)
                 return make_response(
                     "🔄 처음부터 다시 계산합니다.\n\n총 중량(g)을 입력해주세요.\n\n예: 120",
                     ["이전", "처음으로"]
@@ -1421,9 +1413,9 @@ def chatbot():
                     if total_weight <= 0:
                         return make_response("❌ 총 중량은 0보다 커야 합니다.\n\n예: 120", ["이전", "처음으로"])
                     user_data["총중량"] = total_weight
-                    user_data["계산_단계"] = "원재료개수_입력"
+                    user_data["계산_단계"] = "원재료_일괄입력"
                     return make_response(
-                        f"✅ 총 중량: {total_weight}g\n\n배합 함량을 계산할 원재료가 몇 개인가요?\n\n예: 3",
+                        f"✅ 총 중량: {total_weight}g\n\n원재료명과 중량(g)을 입력해주세요.\n콤마(,)로 구분하여 한 번에 입력 가능합니다.\n\n예: 케첩 60, 물엿 20, 기타 40",
                         ["이전", "처음으로"]
                     )
                 except ValueError:
@@ -1432,67 +1424,42 @@ def chatbot():
                         ["이전", "처음으로"]
                     )
 
-            # 2단계: 원재료 개수 입력
-            if step == "원재료개수_입력":
-                try:
-                    count = int(user_input.strip())
-                    if count <= 0:
-                        return make_response("❌ 1개 이상 입력해주세요.\n\n예: 3", ["이전", "처음으로"])
-                    if count > 20:
-                        return make_response("❌ 최대 20개까지 입력 가능합니다.\n\n예: 3", ["이전", "처음으로"])
-                    user_data["원재료_개수"] = count
-                    user_data["현재_원재료_순서"] = 1
-                    user_data["원재료_목록"] = []
-                    user_data["계산_단계"] = "원재료_입력"
-                    return make_response(
-                        f"✅ 총 {count}개의 원재료를 입력합니다.\n\n[1번째 원재료]\n원재료명과 중량(g)을 입력해주세요.\n\n예: 케첩 60",
-                        ["이전", "처음으로"]
-                    )
-                except ValueError:
-                    return make_response(
-                        "❌ 숫자를 입력해주세요.\n\n예: 3",
-                        ["이전", "처음으로"]
-                    )
-
-            # 3단계: 원재료 명칭 + 중량 입력
-            if step == "원재료_입력":
+            # 2단계: 원재료 일괄 입력
+            if step == "원재료_일괄입력":
                 import re
-                # "케첩 60" 또는 "케첩60" 또는 "케첩 60g" 형식 파싱
+                total_weight = user_data.get("총중량")
+
+                # 콤마 또는 줄바꿈으로 분리
+                raw_items = re.split(r'[,\n]+', user_input.strip())
+                ingredients = []
+                errors = []
+
+                # "원재료명 중량" 패턴 파싱
                 pattern = r'^(.+?)\s*(\d+\.?\d*)\s*g?$'
-                match = re.match(pattern, user_input.strip(), re.IGNORECASE)
 
-                if not match:
-                    current = user_data.get("현재_원재료_순서", 1)
+                for item in raw_items:
+                    item = item.strip()
+                    if not item:
+                        continue
+                    match = re.match(pattern, item, re.IGNORECASE)
+                    if match:
+                        name = match.group(1).strip()
+                        weight = float(match.group(2))
+                        if weight >= 0:
+                            ingredients.append({"name": name, "weight": weight})
+                        else:
+                            errors.append(item)
+                    else:
+                        errors.append(item)
+
+                if not ingredients:
                     return make_response(
-                        f"❌ 형식이 올바르지 않습니다.\n\n[{current}번째 원재료]\n원재료명과 중량(g)을 입력해주세요.\n\n예: 케첩 60",
+                        "❌ 형식이 올바르지 않습니다.\n\n원재료명과 중량(g)을 입력해주세요.\n\n예: 케첩 60, 물엿 20, 기타 40",
                         ["이전", "처음으로"]
                     )
 
-                name = match.group(1).strip()
-                weight = float(match.group(2))
-
-                if weight < 0:
-                    return make_response("❌ 중량은 0 이상이어야 합니다.", ["이전", "처음으로"])
-
-                # 원재료 목록에 추가
-                user_data["원재료_목록"].append({"name": name, "weight": weight})
-                current = user_data.get("현재_원재료_순서", 1)
-                total_count = user_data.get("원재료_개수", 1)
-
-                if current < total_count:
-                    # 다음 원재료 입력
-                    user_data["현재_원재료_순서"] = current + 1
-                    return make_response(
-                        f"✅ {name}: {weight}g 추가됨\n\n[{current + 1}번째 원재료]\n원재료명과 중량(g)을 입력해주세요.\n\n예: 물엿 20",
-                        ["이전", "처음으로"]
-                    )
-                else:
-                    # 모든 원재료 입력 완료 - 결과 계산
-                    total_weight = user_data.get("총중량")
-                    ingredients = user_data.get("원재료_목록", [])
-
-                    # 결과 생성
-                    response_text = f"""✅ 배합 함량 계산 결과
+                # 결과 생성
+                response_text = f"""✅ 배합 함량 계산 결과
 
 ━━━━━━━━━━━━━━━
 📊 입력 정보
@@ -1504,13 +1471,13 @@ def chatbot():
 📌 계산 결과
 ━━━━━━━━━━━━━━━"""
 
-                    total_percentage = 0
-                    for ing in ingredients:
-                        percentage = (ing["weight"] / total_weight) * 100
-                        total_percentage += percentage
-                        response_text += f"\n• {ing['name']}: {ing['weight']}g → {percentage:.2f}%"
+                total_percentage = 0
+                for ing in ingredients:
+                    percentage = (ing["weight"] / total_weight) * 100
+                    total_percentage += percentage
+                    response_text += f"\n• {ing['name']}: {ing['weight']}g → {percentage:.2f}%"
 
-                    response_text += f"""
+                response_text += f"""
 
 ━━━━━━━━━━━━━━━
 ✨ 합계: {total_percentage:.2f}%
@@ -1519,15 +1486,15 @@ def chatbot():
 
 다시 계산하시려면 [배합 함량]을 선택하세요."""
 
-                    # 계산 완료 - 상태 초기화
-                    user_data.pop("계산_모드", None)
-                    user_data.pop("계산_단계", None)
-                    user_data.pop("총중량", None)
-                    user_data.pop("원재료_목록", None)
-                    user_data.pop("원재료_개수", None)
-                    user_data.pop("현재_원재료_순서", None)
+                if errors:
+                    response_text += f"\n\n⚠️ 인식 실패 항목: {', '.join(errors)}"
 
-                    return make_response(response_text, ["배합 함량", "이전", "처음으로"])
+                # 계산 완료 - 상태 초기화
+                user_data.pop("계산_모드", None)
+                user_data.pop("계산_단계", None)
+                user_data.pop("총중량", None)
+
+                return make_response(response_text, ["배합 함량", "이전", "처음으로"])
 
         # ===== 영양성분검사 > 함량계산 > 당알코올 계산 =====
         if user_data.get("현재_메뉴") == "함량계산" and user_input == "당알코올 계산":
