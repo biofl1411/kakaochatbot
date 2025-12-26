@@ -3066,6 +3066,57 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
             buttons.append("처음으로")
             return make_response(response_text, buttons)
 
+        # ===== 비용/수수료 관련 질문 처리 =====
+        cost_keywords = ["비용", "수수료", "가격", "단가", "얼마", "요금"]
+        if any(kw in user_input for kw in cost_keywords):
+            # 비용 모드 시작
+            user_data["비용문의_모드"] = True
+
+            # 영양성분 관련 키워드가 있는지 확인
+            if "영양" in user_input or "영양성분" in user_input:
+                user_data["비용문의_분야"] = "영양성분"
+                return make_response(
+                    "💰 영양성분 검사 비용 안내입니다.\n\n검사 종류를 선택해주세요.",
+                    ["5대 영양성분", "9대 영양성분", "14대 영양성분", "처음으로"]
+                )
+            else:
+                return make_response(
+                    "💰 검사 비용 안내입니다.\n\n어떤 검사의 비용을 확인하시겠어요?",
+                    ["영양성분", "자가품질검사", "처음으로"]
+                )
+
+        # ===== 비용문의 모드: 분야 선택 처리 =====
+        if user_data.get("비용문의_모드"):
+            if user_input == "영양성분":
+                user_data["비용문의_분야"] = "영양성분"
+                return make_response(
+                    "💰 영양성분 검사 비용 안내입니다.\n\n검사 종류를 선택해주세요.",
+                    ["5대 영양성분", "9대 영양성분", "14대 영양성분", "이전", "처음으로"]
+                )
+            elif user_input == "자가품질검사":
+                user_data.pop("비용문의_모드", None)
+                return make_response(
+                    "💰 자가품질검사 수수료 안내입니다.\n\n검사 수수료는 식품유형, 살균여부, 보관방법 등에 따라 검사항목과 비용이 달라집니다.\n\n정확한 비용 확인을 위해 [검사항목] 메뉴를 이용해주세요.",
+                    ["검사항목", "처음으로"]
+                )
+            elif user_input in ["5대 영양성분", "9대 영양성분", "14대 영양성분"]:
+                user_data.pop("비용문의_모드", None)
+                user_data.pop("비용문의_분야", None)
+
+                # 영양성분 비용 정보 제공
+                nutrition_costs = {
+                    "5대 영양성분": "💰 5대 영양성분 검사비용\n\n• 항목: 열량, 탄수화물, 당류, 단백질, 지방\n• 수수료: 150,000원\n• 소요기간: 약 5영업일",
+                    "9대 영양성분": "💰 9대 영양성분 검사비용\n\n• 항목: 열량, 탄수화물, 당류, 단백질, 지방, 포화지방, 트랜스지방, 콜레스테롤, 나트륨\n• 수수료: 250,000원\n• 소요기간: 약 7영업일",
+                    "14대 영양성분": "💰 14대 영양성분 검사비용\n\n• 항목: 9대 + 식이섬유, 비타민D, 칼슘, 철, 칼륨\n• 수수료: 350,000원\n• 소요기간: 약 7영업일\n\n※ 긴급검사 시 추가 수수료 발생"
+                }
+                response_text = nutrition_costs.get(user_input, "비용 정보를 찾을 수 없습니다.")
+                return make_response(response_text, ["처음으로"])
+            elif user_input == "이전":
+                return make_response(
+                    "💰 검사 비용 안내입니다.\n\n어떤 검사의 비용을 확인하시겠어요?",
+                    ["영양성분", "자가품질검사", "처음으로"]
+                )
+
         # ===== NLP 검색 (자연어 질문 처리) =====
         if NLP_AVAILABLE and len(user_input) >= 5:
             # 메뉴 키워드가 아닌 경우에만 NLP 검색
