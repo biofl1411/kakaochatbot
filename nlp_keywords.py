@@ -275,11 +275,127 @@ def show_keywords_sample(category: str = None, limit: int = 5):
         print(f"  의도어: {qa.get('intent', 'N/A')}")
 
 
-if __name__ == "__main__":
-    # 키워드 생성 실행
-    generate_all_keywords()
+def search_qa_by_query(query: str, top_n: int = 3, min_score: int = 1) -> list:
+    """
+    사용자 질문으로 관련 Q&A 검색
 
-    # 샘플 확인
-    print("\n" + "="*60)
-    print("키워드 생성 결과 샘플")
-    show_keywords_sample(limit=3)
+    Args:
+        query: 사용자 질문
+        top_n: 반환할 최대 결과 수
+        min_score: 최소 매칭 점수
+
+    Returns:
+        [{"question_id", "category", "title", "content", "score", "matched_keywords"}, ...]
+    """
+    if not query or len(query.strip()) < 2:
+        return []
+
+    # 질문에서 키워드 추출
+    query_keywords = extract_keywords_from_title(query)
+
+    if not query_keywords:
+        return []
+
+    # 모든 Q&A 조회
+    all_qa = get_all_board_mappings()
+
+    results = []
+
+    for qa in all_qa:
+        score = 0
+        matched = []
+
+        # DB에 저장된 키워드, 동의어, 의도어
+        qa_keywords = (qa.get("keywords") or "").lower().split(",")
+        qa_synonyms = (qa.get("synonyms") or "").lower().split(",")
+        qa_intents = (qa.get("intent") or "").lower().split(",")
+
+        # title도 매칭 대상에 포함
+        title_text = (qa.get("title") or "").lower()
+
+        for qk in query_keywords:
+            qk_lower = qk.lower()
+
+            # 1. 키워드 매칭 (1점)
+            for kw in qa_keywords:
+                if qk_lower in kw or kw in qk_lower:
+                    score += 1
+                    matched.append(qk)
+                    break
+
+            # 2. 동의어 매칭 (1점)
+            for syn in qa_synonyms:
+                if syn and (qk_lower in syn or syn in qk_lower):
+                    score += 1
+                    matched.append(f"{qk}(동의어)")
+                    break
+
+            # 3. 의도어 매칭 (0.5점)
+            for intent in qa_intents:
+                if intent and (qk_lower in intent or intent in qk_lower):
+                    score += 0.5
+                    matched.append(f"{qk}(의도)")
+                    break
+
+            # 4. Title 직접 매칭 (2점 - 가중치)
+            if qk_lower in title_text:
+                score += 2
+                matched.append(f"{qk}(제목)")
+
+        if score >= min_score:
+            results.append({
+                "question_id": qa.get("question_id"),
+                "category": qa.get("category"),
+                "title": qa.get("title"),
+                "content": qa.get("content"),
+                "base_url": qa.get("base_url"),
+                "score": score,
+                "matched_keywords": list(set(matched))
+            })
+
+    # 점수순 정렬
+    results.sort(key=lambda x: x["score"], reverse=True)
+
+    return results[:top_n]
+
+
+def test_search(query: str):
+    """검색 테스트"""
+    print(f"\n{'='*60}")
+    print(f"질문: {query}")
+    print(f"{'='*60}")
+
+    results = search_qa_by_query(query, top_n=5)
+
+    if not results:
+        print("매칭된 결과가 없습니다.")
+        return
+
+    for i, r in enumerate(results, 1):
+        print(f"\n[{i}] {r['category']} - {r['title'][:40]}...")
+        print(f"    점수: {r['score']} | 매칭: {', '.join(r['matched_keywords'][:5])}")
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "generate":
+        # 키워드 생성 실행
+        generate_all_keywords()
+
+        # 샘플 확인
+        print("\n" + "="*60)
+        print("키워드 생성 결과 샘플")
+        show_keywords_sample(limit=3)
+    else:
+        # 검색 테스트
+        test_queries = [
+            "글루텐 검사 비용이 얼마예요?",
+            "빵류의 영양성분검사와 자가품질검사를 접수하려면 어떻게 해야하나요?",
+            "과자를 생산하고 있습니다. 소비기한을 6개월에서 1년으로 늘리고 싶어요",
+            "알레르기 검사 방법",
+            "방사능 기준이 뭐예요?",
+        ]
+
+        for q in test_queries:
+            test_search(q)
