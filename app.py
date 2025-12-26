@@ -3020,8 +3020,14 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                     selected_qa = nlp_results[selected_idx - 1]
                     title = selected_qa.get("title", "")
 
-                    # ===== 챗봇용 Q&A: 버튼 로직으로 연결 =====
-                    if "챗봇용" in title:
+                    # ===== 검사주기/검사항목 Q&A: 버튼 로직으로 연결 =====
+                    # 식품/축산 + 검사주기/검사항목 패턴 감지
+                    is_food_cycle = "식품" in title and "검사주기" in title and "축산" not in title
+                    is_food_item = "식품" in title and "검사항목" in title and "축산" not in title
+                    is_livestock_cycle = "축산" in title and "검사주기" in title
+                    is_livestock_item = "축산" in title and "검사항목" in title
+
+                    if is_food_item or is_livestock_item or is_food_cycle or is_livestock_cycle:
                         # NLP 모드 종료
                         user_data.pop("nlp_모드", None)
                         user_data.pop("nlp_검색결과", None)
@@ -3032,7 +3038,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                         user_data.pop("nlp_선택완료", None)
 
                         # 식품 검사항목 → 검사항목 > 식품
-                        if "식품" in title and "검사항목" in title and "축산" not in title:
+                        if is_food_item:
                             user_data["기능"] = "검사항목"
                             user_data["분야"] = "식품"
                             return make_response(
@@ -3040,7 +3046,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                                 ["이전", "처음으로"]
                             )
                         # 축산 검사항목 → 검사항목 > 축산
-                        elif "축산" in title and "검사항목" in title:
+                        elif is_livestock_item:
                             user_data["기능"] = "검사항목"
                             user_data["분야"] = "축산"
                             return make_response(
@@ -3048,7 +3054,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                                 ["이전", "처음으로"]
                             )
                         # 식품 검사주기 → 검사주기 > 식품 > 업종 선택
-                        elif "식품" in title and "검사주기" in title and "축산" not in title:
+                        elif is_food_cycle:
                             user_data["기능"] = "검사주기"
                             user_data["분야"] = "식품"
                             return make_response(
@@ -3056,7 +3062,7 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                                 ["식품제조가공업", "즉석판매제조가공업", "이전", "처음으로"]
                             )
                         # 축산 검사주기 → 검사주기 > 축산 > 업종 선택
-                        elif "축산" in title and "검사주기" in title:
+                        elif is_livestock_cycle:
                             user_data["기능"] = "검사주기"
                             user_data["분야"] = "축산"
                             return make_response(
@@ -3194,6 +3200,50 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
                     return make_response(
                         "💰 검사 비용 안내입니다.\n\n어떤 검사의 비용을 확인하시겠어요?",
                         ["영양성분", "자가품질검사", "기타", "처음으로"]
+                    )
+
+        # ===== 자연어 "식품유형 + 주기/항목" 패턴 감지 → 버튼 로직 연결 =====
+        # 예: "과자 검사주기", "빵류 항목", "소시지 검사항목"
+        cycle_pattern = re.search(r'(.+?)\s*(검사\s*주기|주기)', user_input)
+        item_pattern = re.search(r'(.+?)\s*(검사\s*항목|항목)', user_input)
+
+        if cycle_pattern or item_pattern:
+            if cycle_pattern:
+                food_type_candidate = cycle_pattern.group(1).strip()
+                target_function = "검사주기"
+            else:
+                food_type_candidate = item_pattern.group(1).strip()
+                target_function = "검사항목"
+
+            # 식품유형 후보가 유효한지 확인 (너무 짧거나 메뉴 키워드가 아닌 경우)
+            skip_words = ["식품", "축산", "의", "에", "를", "을", ""]
+            if food_type_candidate and food_type_candidate not in skip_words and len(food_type_candidate) >= 2:
+                # 식품/축산 분야 판단
+                if any(kw in user_input for kw in ["축산", "햄", "소시지", "베이컨", "육가공"]):
+                    field = "축산"
+                else:
+                    field = "식품"
+
+                user_data["기능"] = target_function
+                user_data["분야"] = field
+
+                if target_function == "검사주기":
+                    # 검사주기는 업종 선택 필요
+                    if field == "식품":
+                        return make_response(
+                            f"📋 '{food_type_candidate}'의 검사주기를 조회합니다.\n\n업종을 선택해주세요.",
+                            ["식품제조가공업", "즉석판매제조가공업", "이전", "처음으로"]
+                        )
+                    else:
+                        return make_response(
+                            f"📋 '{food_type_candidate}'의 검사주기를 조회합니다.\n\n업종을 선택해주세요.",
+                            ["축산물제조가공업", "축산물즉석판매제조가공업", "이전", "처음으로"]
+                        )
+                else:
+                    # 검사항목은 바로 식품유형 입력 대기
+                    return make_response(
+                        f"[{field}] 검사할 식품 유형을 입력해주세요.\n\n예: 과자, 음료, 소시지 등\n\n(주의 : 품목제조보고서에 표기된 \"식품유형\"을 입력하세요. 단어에 가운데 점이 있는 경우 제외하고 입력하세요)\n\n💡 '{food_type_candidate}'(으)로 검색하시려면 그대로 입력해주세요.",
+                        ["이전", "처음으로"]
                     )
 
         # ===== NLP 검색 (자연어 질문 처리) =====
