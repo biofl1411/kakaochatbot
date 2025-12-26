@@ -1413,7 +1413,8 @@ def chatbot():
             )
 
         # ===== 영양성분검사 > 함량계산 > 배합 함량 =====
-        if user_data.get("현재_메뉴") == "함량계산" and user_input == "배합 함량":
+        # 함량계산 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
+        if user_input == "배합 함량":
             user_data["계산_모드"] = "배합함량"
             user_data["계산_단계"] = "총중량_입력"
             user_data.pop("현재_메뉴", None)
@@ -1545,7 +1546,8 @@ def chatbot():
                 return make_response(response_text, ["배합 함량", "이전", "처음으로"])
 
         # ===== 영양성분검사 > 함량계산 > 당알코올 계산 =====
-        if user_data.get("현재_메뉴") == "함량계산" and user_input == "당알코올 계산":
+        # 함량계산 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
+        if user_input == "당알코올 계산":
             user_data["계산_모드"] = "당알코올"
             user_data["계산_단계"] = "배합함량_입력"
             user_data.pop("현재_메뉴", None)
