@@ -658,8 +658,8 @@ def make_response_with_link(text: str, link_label: str, link_url: str, buttons: 
         "template": {
             "outputs": [
                 {
-                    "basicCard": {
-                        "description": text,
+                    "textCard": {
+                        "text": text,
                         "buttons": [
                             {
                                 "label": link_label,
