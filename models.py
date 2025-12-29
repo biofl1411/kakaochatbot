@@ -175,13 +175,13 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 띄어쓰기 및 가운데점(·) 제거한 검색어
-    search_key = food_type.replace(" ", "").replace("·", "")
+    # 띄어쓰기 및 가운데점(· 또는 ･) 제거한 검색어
+    search_key = food_type.replace(" ", "").replace("·", "").replace("･", "")
 
     # 1. 정확히 일치하는 경우 (띄어쓰기, 가운데점 무시)
     cursor.execute("""
         SELECT * FROM inspection_items
-        WHERE category = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') = ?
+        WHERE category = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') = ?
     """, (category, search_key))
     result = cursor.fetchone()
     if result:
@@ -191,12 +191,12 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     # 2. 검색어로 끝나는 경우 (예: "음료" → "탄산음료", "과채음료")
     cursor.execute("""
         SELECT * FROM inspection_items
-        WHERE category = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') LIKE ?
+        WHERE category = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') LIKE ?
     """, (category, f"%{search_key}"))
     results = cursor.fetchall()
 
     # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
-    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "") == search_key]
+    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "") == search_key]
 
     if endswith_filtered:
         conn.close()
@@ -205,7 +205,7 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     # 3. 검색어가 포함된 경우 (예: "탄산" → "탄산음료", "유산균" → "유산균음료")
     cursor.execute("""
         SELECT * FROM inspection_items
-        WHERE category = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') LIKE ?
+        WHERE category = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') LIKE ?
     """, (category, f"%{search_key}%"))
     results = cursor.fetchall()
 
@@ -220,12 +220,12 @@ def search_inspection_items(category: str, keyword: str) -> list:
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 가운데점 제거한 검색어
-    search_key = keyword.replace("·", "")
+    # 가운데점(· 또는 ･) 제거한 검색어
+    search_key = keyword.replace("·", "").replace("･", "")
 
     cursor.execute("""
         SELECT * FROM inspection_items
-        WHERE category = ? AND REPLACE(food_type, '·', '') LIKE ?
+        WHERE category = ? AND REPLACE(REPLACE(food_type, '·', ''), '･', '') LIKE ?
         ORDER BY food_type
     """, (category, f"%{search_key}%"))
 
@@ -306,13 +306,13 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 띄어쓰기 및 가운데점(·) 제거한 검색어
-    search_key = food_type.replace(" ", "").replace("·", "")
+    # 띄어쓰기 및 가운데점(· 또는 ･) 제거한 검색어
+    search_key = food_type.replace(" ", "").replace("·", "").replace("･", "")
 
     # 1. 정확히 일치하는 경우 (띄어쓰기, 가운데점 무시)
     cursor.execute("""
         SELECT * FROM inspection_cycles
-        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') = ?
+        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') = ?
     """, (category, industry, search_key))
     result = cursor.fetchone()
     if result:
@@ -322,12 +322,12 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     # 2. 검색어로 끝나는 경우 (예: "음료" → "탄산음료", "과채음료")
     cursor.execute("""
         SELECT * FROM inspection_cycles
-        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') LIKE ?
+        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') LIKE ?
     """, (category, industry, f"%{search_key}"))
     results = cursor.fetchall()
 
     # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
-    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "") == search_key]
+    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "") == search_key]
 
     if endswith_filtered:
         conn.close()
@@ -336,7 +336,7 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     # 3. 검색어가 포함된 경우 (예: "탄산" → "탄산음료", "유산균" → "유산균음료")
     cursor.execute("""
         SELECT * FROM inspection_cycles
-        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(food_type, ' ', ''), '·', '') LIKE ?
+        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(REPLACE(food_type, ' ', ''), '·', ''), '･', '') LIKE ?
     """, (category, industry, f"%{search_key}%"))
     results = cursor.fetchall()
 
@@ -351,12 +351,12 @@ def search_inspection_cycles(category: str, industry: str, keyword: str) -> list
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 가운데점 제거한 검색어
-    search_key = keyword.replace("·", "")
+    # 가운데점(· 또는 ･) 제거한 검색어
+    search_key = keyword.replace("·", "").replace("･", "")
 
     cursor.execute("""
         SELECT * FROM inspection_cycles
-        WHERE category = ? AND industry = ? AND REPLACE(food_type, '·', '') LIKE ?
+        WHERE category = ? AND industry = ? AND REPLACE(REPLACE(food_type, '·', ''), '･', '') LIKE ?
         ORDER BY food_type
     """, (category, industry, f"%{search_key}%"))
 
@@ -400,10 +400,10 @@ def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list
     similar = []
 
     # 띄어쓰기 및 가운데점(·) 제거
-    keyword_normalized = keyword.replace(" ", "").replace("·", "")
+    keyword_normalized = keyword.replace(" ", "").replace("·", "").replace("･", "")
 
     for food_type in all_types:
-        food_type_normalized = food_type.replace(" ", "").replace("·", "")
+        food_type_normalized = food_type.replace(" ", "").replace("·", "").replace("･", "")
 
         # 검색어로 시작하는 단어 제외 (예: "햄" 검색 시 "햄버거류" 제외)
         if food_type_normalized.startswith(keyword_normalized) and food_type_normalized != keyword_normalized:
@@ -435,10 +435,10 @@ def find_similar_cycles(category: str, industry: str, keyword: str, min_score: i
     similar = []
 
     # 띄어쓰기 및 가운데점(·) 제거
-    keyword_normalized = keyword.replace(" ", "").replace("·", "")
+    keyword_normalized = keyword.replace(" ", "").replace("·", "").replace("･", "")
 
     for food_type in all_types:
-        food_type_normalized = food_type.replace(" ", "").replace("·", "")
+        food_type_normalized = food_type.replace(" ", "").replace("·", "").replace("･", "")
 
         # 검색어로 시작하는 단어 제외 (예: "햄" 검색 시 "햄버거류" 제외)
         if food_type_normalized.startswith(keyword_normalized) and food_type_normalized != keyword_normalized:
