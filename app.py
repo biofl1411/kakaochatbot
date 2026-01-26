@@ -26,9 +26,12 @@ from models import (
     save_qa_response,
     update_qa_response,
     delete_qa_response,
+    activate_qa_response,
     search_qa_response,
+    search_qa_by_keyword,
     get_all_qa_responses,
     get_qa_by_id,
+    get_qa_statistics,
     # 미답변 질문 관련
     log_unanswered_question,
     get_unanswered_questions,
@@ -87,14 +90,19 @@ def handle_admin_command(user_id: str, command: str) -> str:
 !학습 질문|답변|키워드1,키워드2 : 키워드와 함께 추가
 !수정 ID|새답변 : Q&A 답변 수정
 !삭제 ID : Q&A 삭제
+!활성화 ID : 삭제된 Q&A 복구
 !QA목록 : 등록된 Q&A 목록
+!검색 키워드 : Q&A 검색
+!상세 ID : Q&A 상세 정보
 
 [미답변 관리]
 !미답변 : 미답변 질문 목록 (빈도순)
 !미답변학습 ID|답변 : 미답변을 Q&A로 등록
 !미답변삭제 ID : 미답변 삭제
 
-[관리자]
+[시스템]
+!통계 : Q&A/미답변 통계
+!API사용량 : Vision API 사용량
 !관리자추가 유저ID : 관리자 추가
 !관리자목록 : 관리자 목록"""
 
@@ -263,6 +271,101 @@ def handle_admin_command(user_id: str, command: str) -> str:
         for admin in admins:
             name = admin['name'] or "이름없음"
             result += f"• {name} ({admin['user_id'][:10]}...)\n"
+        return result
+
+    # !통계
+    if cmd == "!통계":
+        stats = get_qa_statistics()
+        result = "📊 Q&A 통계\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"• 등록된 Q&A: {stats['total_qa']}개\n"
+        result += f"• 삭제된 Q&A: {stats['deleted_qa']}개\n"
+        result += f"• 총 사용 횟수: {stats['total_usage']}회\n"
+        result += f"• 미답변 질문: {stats['unanswered_count']}개\n"
+        result += f"• 해결된 미답변: {stats['resolved_count']}개\n"
+        if stats['top_qa']:
+            result += "\n🏆 인기 Q&A (TOP 3)\n"
+            for i, qa in enumerate(stats['top_qa'], 1):
+                q_short = qa['question'][:15] + "..." if len(qa['question']) > 15 else qa['question']
+                result += f"{i}. {q_short} ({qa['use_count']}회)\n"
+        return result
+
+    # !검색 키워드
+    if cmd == "!검색":
+        if not args:
+            return "❌ 형식: !검색 키워드"
+
+        results = search_qa_by_keyword(args.strip())
+        if not results:
+            return f"❌ '{args}'에 대한 검색 결과가 없습니다."
+
+        result = f"🔍 '{args}' 검색 결과 ({len(results)}개)\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        for qa in results[:10]:
+            q_short = qa['question'][:20] + "..." if len(qa['question']) > 20 else qa['question']
+            result += f"#{qa['id']} [{qa['use_count']}회] {q_short}\n"
+        return result
+
+    # !상세 ID
+    if cmd == "!상세":
+        if not args:
+            return "❌ 형식: !상세 ID"
+
+        try:
+            qa_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        qa = get_qa_by_id(qa_id)
+        if not qa:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+        result = f"📋 Q&A #{qa_id} 상세 정보\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"질문: {qa['question']}\n\n"
+        result += f"답변: {qa['answer']}\n\n"
+        result += f"키워드: {qa['keywords'] or '없음'}\n"
+        result += f"카테고리: {qa['category']}\n"
+        result += f"사용횟수: {qa['use_count']}회\n"
+        result += f"상태: {'활성' if qa['is_active'] else '삭제됨'}\n"
+        result += f"생성자: {qa['created_by']}\n"
+        result += f"생성일: {qa['created_at'][:10]}"
+        return result
+
+    # !활성화 ID
+    if cmd == "!활성화":
+        if not args:
+            return "❌ 형식: !활성화 ID"
+
+        try:
+            qa_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        qa = get_qa_by_id(qa_id)
+        if not qa:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+        if qa['is_active']:
+            return f"❌ Q&A #{qa_id}는 이미 활성 상태입니다."
+
+        if activate_qa_response(qa_id):
+            return f"✅ Q&A #{qa_id} 활성화 완료!\n복구된 질문: {qa['question']}"
+        else:
+            return f"❌ Q&A #{qa_id} 활성화 실패"
+
+    # !API사용량
+    if cmd == "!API사용량":
+        remaining = get_vision_api_remaining()
+        from config import VISION_API_MONTHLY_LIMIT
+        used = VISION_API_MONTHLY_LIMIT - remaining
+        result = "📊 Vision API 사용량\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"• 월 제한: {VISION_API_MONTHLY_LIMIT}회\n"
+        result += f"• 사용량: {used}회\n"
+        result += f"• 잔여: {remaining}회\n"
+        if remaining < 100:
+            result += "\n⚠️ 잔여 횟수가 적습니다!"
         return result
 
     return f"❌ 알 수 없는 명령어: {cmd}\n!도움말 로 명령어 목록을 확인하세요."

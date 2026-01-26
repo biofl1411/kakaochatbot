@@ -849,6 +849,84 @@ def delete_qa_response(qa_id: int) -> bool:
     return affected > 0
 
 
+def activate_qa_response(qa_id: int) -> bool:
+    """Q&A 활성화 (삭제 복구)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE qa_responses SET is_active = 1, updated_at = ? WHERE id = ?
+    """, (datetime.now(), qa_id))
+
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+
+    return affected > 0
+
+
+def search_qa_by_keyword(keyword: str) -> list:
+    """Q&A 키워드 검색"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    search_key = f"%{keyword}%"
+    cursor.execute("""
+        SELECT * FROM qa_responses
+        WHERE is_active = 1 AND (question LIKE ? OR answer LIKE ? OR keywords LIKE ?)
+        ORDER BY use_count DESC
+    """, (search_key, search_key, search_key))
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def get_qa_statistics() -> dict:
+    """Q&A 통계 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 전체 Q&A 수
+    cursor.execute("SELECT COUNT(*) as cnt FROM qa_responses WHERE is_active = 1")
+    total_qa = cursor.fetchone()['cnt']
+
+    # 삭제된 Q&A 수
+    cursor.execute("SELECT COUNT(*) as cnt FROM qa_responses WHERE is_active = 0")
+    deleted_qa = cursor.fetchone()['cnt']
+
+    # 총 사용 횟수
+    cursor.execute("SELECT SUM(use_count) as total FROM qa_responses WHERE is_active = 1")
+    total_usage = cursor.fetchone()['total'] or 0
+
+    # 미답변 질문 수
+    cursor.execute("SELECT COUNT(*) as cnt FROM unanswered_questions WHERE is_resolved = 0")
+    unanswered_count = cursor.fetchone()['cnt']
+
+    # 해결된 미답변 수
+    cursor.execute("SELECT COUNT(*) as cnt FROM unanswered_questions WHERE is_resolved = 1")
+    resolved_count = cursor.fetchone()['cnt']
+
+    # 가장 많이 사용된 Q&A (상위 3개)
+    cursor.execute("""
+        SELECT id, question, use_count FROM qa_responses
+        WHERE is_active = 1 ORDER BY use_count DESC LIMIT 3
+    """)
+    top_qa = [dict(row) for row in cursor.fetchall()]
+
+    conn.close()
+
+    return {
+        'total_qa': total_qa,
+        'deleted_qa': deleted_qa,
+        'total_usage': total_usage,
+        'unanswered_count': unanswered_count,
+        'resolved_count': resolved_count,
+        'top_qa': top_qa
+    }
+
+
 def search_qa_response(search_text: str, min_score: int = 60) -> dict:
     """Q&A 검색 - 사용자 질문과 가장 유사한 답변 찾기"""
     conn = get_connection()
