@@ -22,7 +22,28 @@ from models import (
     get_last_crawl_time,
     can_use_vision_api,
     get_vision_api_remaining,
-    get_nutrition_info
+    get_nutrition_info,
+    # Q&A 관련
+    save_qa_response,
+    update_qa_response,
+    delete_qa_response,
+    activate_qa_response,
+    get_qa_by_id,
+    get_all_qa_responses,
+    search_qa_response,
+    search_qa_by_keyword,
+    get_qa_statistics,
+    # 미답변 관련
+    log_unanswered_question,
+    get_unanswered_questions,
+    get_unanswered_by_id,
+    delete_unanswered_question,
+    resolve_unanswered_question,
+    # 관리자 관련
+    is_admin_user,
+    has_any_admin,
+    add_admin_user,
+    get_all_admin_users
 )
 try:
     from vision_ocr import extract_food_type_from_image, is_vision_api_available
@@ -1066,6 +1087,312 @@ INSPECTION_MENU = {
 }
 
 
+def handle_admin_command(user_id: str, command: str) -> str:
+    """관리자 명령어 처리"""
+    # 첫 번째 !명령어 사용자는 자동으로 관리자 등록 (관리자가 없는 경우)
+    if not has_any_admin():
+        add_admin_user(user_id, "초기관리자")
+        logger.info(f"[{user_id}] 초기 관리자로 자동 등록")
+
+    # 관리자 권한 확인
+    if not is_admin_user(user_id):
+        return "❌ 관리자 권한이 없습니다."
+
+    # 명령어 파싱
+    parts = command.split(" ", 1)
+    cmd = parts[0]
+    args = parts[1] if len(parts) > 1 else ""
+
+    # !도움말
+    if cmd == "!도움말":
+        return """📋 관리자 명령어 도움말
+
+[Q&A 관리]
+!학습 질문|답변 : Q&A 추가
+!학습 질문|답변|키워드1,키워드2 : 키워드와 함께 추가
+!수정 ID|새답변 : Q&A 답변 수정
+!삭제 ID : Q&A 삭제
+!활성화 ID : 삭제된 Q&A 복구
+!QA목록 : 등록된 Q&A 목록
+!검색 키워드 : Q&A 검색
+!상세 ID : Q&A 상세 정보
+
+[미답변 관리]
+!미답변 : 미답변 질문 목록 (빈도순)
+!미답변학습 ID|답변 : 미답변을 Q&A로 등록
+!미답변삭제 ID : 미답변 삭제
+
+[시스템]
+!통계 : Q&A/미답변 통계
+!API사용량 : Vision API 사용량
+!관리자추가 유저ID : 관리자 추가
+!관리자목록 : 관리자 목록"""
+
+    # !학습 질문|답변 또는 !학습 질문|답변|키워드
+    if cmd == "!학습":
+        if not args:
+            return "❌ 형식: !학습 질문|답변 또는 !학습 질문|답변|키워드1,키워드2"
+
+        parts = args.split("|")
+        if len(parts) < 2:
+            return "❌ 형식: !학습 질문|답변 (|로 구분)"
+
+        question = parts[0].strip()
+        answer = parts[1].strip()
+        keywords = parts[2].strip() if len(parts) > 2 else None
+
+        if not question or not answer:
+            return "❌ 질문과 답변을 모두 입력해주세요."
+
+        qa_id = save_qa_response(question, answer, keywords, created_by=user_id)
+        result = f"✅ Q&A 등록 완료! (ID: {qa_id})\n\n질문: {question}\n답변: {answer}"
+        if keywords:
+            result += f"\n키워드: {keywords}"
+        return result
+
+    # !수정 ID|새답변
+    if cmd == "!수정":
+        if not args:
+            return "❌ 형식: !수정 ID|새답변"
+
+        parts = args.split("|")
+        if len(parts) < 2:
+            return "❌ 형식: !수정 ID|새답변"
+
+        try:
+            qa_id = int(parts[0].strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        new_answer = parts[1].strip()
+        if not new_answer:
+            return "❌ 새 답변을 입력해주세요."
+
+        if update_qa_response(qa_id, answer=new_answer):
+            return f"✅ Q&A #{qa_id} 수정 완료!\n새 답변: {new_answer}"
+        else:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+    # !삭제 ID
+    if cmd == "!삭제":
+        if not args:
+            return "❌ 형식: !삭제 ID"
+
+        try:
+            qa_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        qa = get_qa_by_id(qa_id)
+        if not qa:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+        if delete_qa_response(qa_id):
+            return f"✅ Q&A #{qa_id} 삭제 완료!\n삭제된 질문: {qa['question']}"
+        else:
+            return f"❌ Q&A #{qa_id} 삭제 실패"
+
+    # !QA목록
+    if cmd == "!QA목록":
+        qa_list = get_all_qa_responses()
+        if not qa_list:
+            return "📋 등록된 Q&A가 없습니다."
+
+        result = f"📋 Q&A 목록 ({len(qa_list)}개)\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        for qa in qa_list[:15]:  # 최대 15개
+            q_short = qa['question'][:20] + "..." if len(qa['question']) > 20 else qa['question']
+            result += f"#{qa['id']} [{qa['use_count']}회] {q_short}\n"
+
+        if len(qa_list) > 15:
+            result += f"\n... 외 {len(qa_list) - 15}개"
+        return result
+
+    # !미답변
+    if cmd == "!미답변":
+        unanswered = get_unanswered_questions(limit=15)
+        if not unanswered:
+            return "📋 미답변 질문이 없습니다."
+
+        result = f"📋 미답변 질문 목록 ({len(unanswered)}개, 빈도순)\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        for ua in unanswered:
+            q_short = ua['question'][:25] + "..." if len(ua['question']) > 25 else ua['question']
+            result += f"#{ua['id']} [{ua['count']}회] {q_short}\n"
+        return result
+
+    # !미답변학습 ID|답변
+    if cmd == "!미답변학습":
+        if not args:
+            return "❌ 형식: !미답변학습 ID|답변"
+
+        parts = args.split("|")
+        if len(parts) < 2:
+            return "❌ 형식: !미답변학습 ID|답변"
+
+        try:
+            ua_id = int(parts[0].strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        answer = parts[1].strip()
+        if not answer:
+            return "❌ 답변을 입력해주세요."
+
+        # 미답변 질문 조회
+        unanswered = get_unanswered_by_id(ua_id)
+        if not unanswered:
+            return f"❌ 미답변 #{ua_id}를 찾을 수 없습니다."
+
+        # Q&A로 등록
+        qa_id = save_qa_response(unanswered['question'], answer, created_by=user_id)
+
+        # 미답변 해결 처리
+        resolve_unanswered_question(ua_id, qa_id)
+
+        return f"✅ 미답변 #{ua_id} → Q&A #{qa_id} 등록 완료!\n\n질문: {unanswered['question']}\n답변: {answer}"
+
+    # !미답변삭제 ID
+    if cmd == "!미답변삭제":
+        if not args:
+            return "❌ 형식: !미답변삭제 ID"
+
+        try:
+            ua_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        unanswered = get_unanswered_by_id(ua_id)
+        if not unanswered:
+            return f"❌ 미답변 #{ua_id}를 찾을 수 없습니다."
+
+        if delete_unanswered_question(ua_id):
+            return f"✅ 미답변 #{ua_id} 삭제 완료!\n삭제된 질문: {unanswered['question']}"
+        else:
+            return f"❌ 미답변 #{ua_id} 삭제 실패"
+
+    # !관리자추가 유저ID
+    if cmd == "!관리자추가":
+        if not args:
+            return "❌ 형식: !관리자추가 유저ID"
+
+        new_admin_id = args.strip()
+        if add_admin_user(new_admin_id):
+            return f"✅ 관리자 추가 완료: {new_admin_id}"
+        else:
+            return f"❌ 이미 등록된 관리자이거나 추가 실패: {new_admin_id}"
+
+    # !관리자목록
+    if cmd == "!관리자목록":
+        admins = get_all_admin_users()
+        if not admins:
+            return "📋 등록된 관리자가 없습니다."
+
+        result = f"📋 관리자 목록 ({len(admins)}명)\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        for admin in admins:
+            name = admin['name'] or "이름없음"
+            result += f"• {name} ({admin['user_id'][:10]}...)\n"
+        return result
+
+    # !통계
+    if cmd == "!통계":
+        stats = get_qa_statistics()
+        result = "📊 Q&A 통계\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"• 등록된 Q&A: {stats['total_qa']}개\n"
+        result += f"• 삭제된 Q&A: {stats['deleted_qa']}개\n"
+        result += f"• 총 사용 횟수: {stats['total_usage']}회\n"
+        result += f"• 미답변 질문: {stats['unanswered_count']}개\n"
+        result += f"• 해결된 미답변: {stats['resolved_count']}개\n"
+        if stats['top_qa']:
+            result += "\n🏆 인기 Q&A (TOP 3)\n"
+            for i, qa in enumerate(stats['top_qa'], 1):
+                q_short = qa['question'][:15] + "..." if len(qa['question']) > 15 else qa['question']
+                result += f"{i}. {q_short} ({qa['use_count']}회)\n"
+        return result
+
+    # !검색 키워드
+    if cmd == "!검색":
+        if not args:
+            return "❌ 형식: !검색 키워드"
+
+        results = search_qa_by_keyword(args.strip())
+        if not results:
+            return f"❌ '{args}'에 대한 검색 결과가 없습니다."
+
+        result = f"🔍 '{args}' 검색 결과 ({len(results)}개)\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        for qa in results[:10]:
+            q_short = qa['question'][:20] + "..." if len(qa['question']) > 20 else qa['question']
+            result += f"#{qa['id']} [{qa['use_count']}회] {q_short}\n"
+        return result
+
+    # !상세 ID
+    if cmd == "!상세":
+        if not args:
+            return "❌ 형식: !상세 ID"
+
+        try:
+            qa_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        qa = get_qa_by_id(qa_id)
+        if not qa:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+        result = f"📋 Q&A #{qa_id} 상세 정보\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"질문: {qa['question']}\n\n"
+        result += f"답변: {qa['answer']}\n\n"
+        result += f"키워드: {qa['keywords'] or '없음'}\n"
+        result += f"카테고리: {qa['category']}\n"
+        result += f"사용횟수: {qa['use_count']}회\n"
+        result += f"상태: {'활성' if qa['is_active'] else '삭제됨'}\n"
+        result += f"생성자: {qa['created_by']}\n"
+        result += f"생성일: {qa['created_at'][:10]}"
+        return result
+
+    # !활성화 ID
+    if cmd == "!활성화":
+        if not args:
+            return "❌ 형식: !활성화 ID"
+
+        try:
+            qa_id = int(args.strip())
+        except ValueError:
+            return "❌ ID는 숫자여야 합니다."
+
+        qa = get_qa_by_id(qa_id)
+        if not qa:
+            return f"❌ Q&A #{qa_id}를 찾을 수 없습니다."
+
+        if qa['is_active']:
+            return f"❌ Q&A #{qa_id}는 이미 활성 상태입니다."
+
+        if activate_qa_response(qa_id):
+            return f"✅ Q&A #{qa_id} 활성화 완료!\n복구된 질문: {qa['question']}"
+        else:
+            return f"❌ Q&A #{qa_id} 활성화 실패"
+
+    # !API사용량
+    if cmd == "!API사용량":
+        remaining = get_vision_api_remaining()
+        from config import VISION_API_MONTHLY_LIMIT
+        used = VISION_API_MONTHLY_LIMIT - remaining
+        result = "📊 Vision API 사용량\n"
+        result += "━━━━━━━━━━━━━━━\n"
+        result += f"• 월 제한: {VISION_API_MONTHLY_LIMIT}회\n"
+        result += f"• 사용량: {used}회\n"
+        result += f"• 잔여: {remaining}회\n"
+        if remaining < 100:
+            result += "\n⚠️ 잔여 횟수가 적습니다!"
+        return result
+
+    return f"❌ 알 수 없는 명령어: {cmd}\n!도움말 로 명령어 목록을 확인하세요."
+
+
 def reset_user_state(user_id: str):
     """사용자 상태 초기화"""
     user_state[user_id] = {"히스토리": []}
@@ -1151,6 +1478,11 @@ def chatbot():
                 "안녕하세요! 바이오푸드랩 챗봇[바푸]입니다.\n\n🔬 검사분야 버튼으로 분야별 검색 가능\n⚡ 퀵 메뉴 검사주기, 검사항목으로 빠른 조회\n🧮 영양성분 메뉴에서 함량, 당알코올 함량 계산\n💡 버튼 외 자연어로 질문하셔도 됩니다!\n\n자세한 상담은 채팅방 메뉴에서 \"채널 이동\"을 누르시면 상담이 가능한 채널로 이동합니다.\n(업무 시간 09:00~17:30)\n\n개발자 : @BP_K",
                 ["검사분야", "검사주기", "검사항목"]
             )
+
+        # ===== 관리자 명령어 처리 (! 로 시작) =====
+        if user_input.startswith("!"):
+            admin_result = handle_admin_command(user_id, user_input)
+            return make_response(admin_result, ["처음으로"])
 
         # "이전" 버튼 처리
         if user_input == "이전":
