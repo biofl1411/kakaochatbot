@@ -146,8 +146,219 @@ def init_database():
         )
     """)
 
+    # 1회 섭취참고량 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS serving_size_reference (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            food_group TEXT NOT NULL,
+            food_type TEXT NOT NULL,
+            food_subtype TEXT,
+            detail TEXT,
+            serving_size REAL NOT NULL,
+            unit TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 테이블이 비어있으면 초기 데이터 삽입
+    cursor.execute("SELECT COUNT(*) as cnt FROM serving_size_reference")
+    if cursor.fetchone()['cnt'] == 0:
+        _insert_serving_size_data(cursor)
+
     conn.commit()
     conn.close()
+
+
+def _insert_serving_size_data(cursor):
+    """1회 섭취참고량 초기 데이터 삽입"""
+    data = [
+        # [과자류, 빵류 또는 떡류]
+        ("과자류, 빵류 또는 떡류", "과자", "강냉이,팝콘", None, 20, "g"),
+        ("과자류, 빵류 또는 떡류", "과자", "기타", None, 30, "g"),
+        ("과자류, 빵류 또는 떡류", "캔디류", "양갱", None, 50, "g"),
+        ("과자류, 빵류 또는 떡류", "캔디류", "푸딩", None, 100, "g"),
+        ("과자류, 빵류 또는 떡류", "캔디류", "그밖의해당식품", None, 10, "g"),
+        ("과자류, 빵류 또는 떡류", "추잉껌", None, None, 3, "g"),
+        ("과자류, 빵류 또는 떡류", "빵류", "피자", None, 150, "g"),
+        ("과자류, 빵류 또는 떡류", "빵류", "그밖의해당식품", None, 70, "g"),
+        ("과자류, 빵류 또는 떡류", "떡류", None, None, 100, "g"),
+
+        # [빙과류]
+        ("빙과류", "아이스크림류", None, None, 100, "ml"),
+        ("빙과류", "빙과", None, None, 100, "g(ml)"),
+
+        # [코코아가공품류 또는 초콜릿류]
+        ("코코아가공품류 또는 초콜릿류", "초콜릿가공품", None, None, 30, "g"),
+        ("코코아가공품류 또는 초콜릿류", "초콜릿류", "초콜릿가공품 제외", None, 15, "g"),
+
+        # [당류]
+        ("당류", "설탕류", None, None, 5, "g"),
+        ("당류", "당시럽류", None, None, 10, "g"),
+        ("당류", "올리고당", None, None, 10, "g"),
+        ("당류", "물엿", None, None, 10, "g"),
+        ("당류", "덩어리엿", None, None, 10, "g"),
+        ("당류", "가루엿", None, None, 5, "g"),
+
+        # [잼류]
+        ("잼류", "잼", None, None, 20, "g"),
+        ("잼류", "기타잼", None, None, 20, "g"),
+
+        # [두부류 또는 묵류]
+        ("두부류 또는 묵류", "두부", None, None, 80, "g"),
+        ("두부류 또는 묵류", "유바", None, None, 80, "g"),
+        ("두부류 또는 묵류", "가공두부", None, None, 80, "g"),
+        ("두부류 또는 묵류", "묵류", None, None, 80, "g"),
+
+        # [식용유지류]
+        ("식용유지류", "식용유", None, None, 5, "g(ml)"),
+        ("식용유지류", "모조치즈", None, None, 20, "g"),
+        ("식용유지류", "식물성크림", None, None, 5, "g"),
+
+        # [면류]
+        ("면류", "생면", None, None, 200, "g"),
+        ("면류", "숙면", None, None, 200, "g"),
+        ("면류", "건면", "당면제외", None, 100, "g"),
+        ("면류", "당면", None, None, 30, "g"),
+        ("면류", "유탕면", "봉지", None, 120, "g"),
+        ("면류", "유탕면", "용기", None, 80, "g"),
+
+        # [음료류]
+        ("음료류", "침출차", "당류포함", None, 200, "ml"),
+        ("음료류", "침출차", "당류비포함", None, 300, "ml"),
+        ("음료류", "액상차", "당류포함", None, 200, "ml"),
+        ("음료류", "액상차", "당류비포함", None, 300, "ml"),
+        ("음료류", "고형차", None, None, 200, "ml"),
+        ("음료류", "커피", None, None, 240, "ml"),
+        ("음료류", "농축과채즙", None, None, 100, "ml"),
+        ("음료류", "과채주스", None, None, 200, "ml"),
+        ("음료류", "과채음료", None, None, 200, "ml"),
+        ("음료류", "탄산음료", None, None, 200, "ml"),
+        ("음료류", "탄산수", None, None, 300, "ml"),
+        ("음료류", "두유류", None, None, 200, "ml"),
+        ("음료류", "발효음료류", None, None, 100, "ml"),
+        ("음료류", "인삼홍삼음료", None, None, 100, "ml"),
+        ("음료류", "혼합음료", None, None, 200, "ml"),
+        ("음료류", "음료베이스", None, None, 150, "ml"),
+
+        # [장류]
+        ("장류", "한식간장", None, None, 5, "ml"),
+        ("장류", "양조간장", None, None, 5, "ml"),
+        ("장류", "산분해간장", None, None, 5, "ml"),
+        ("장류", "효소분해간장", None, None, 5, "ml"),
+        ("장류", "혼합간장", None, None, 5, "ml"),
+        ("장류", "한식된장", None, None, 10, "g"),
+        ("장류", "된장", None, None, 10, "g"),
+        ("장류", "고추장", None, None, 10, "g"),
+        ("장류", "혼합장", None, None, 10, "g"),
+        ("장류", "기타장류", None, None, 10, "g"),
+        ("장류", "춘장", None, None, 25, "g"),
+        ("장류", "청국장", None, None, 25, "g"),
+        ("장류", "나토", None, None, 50, "g"),
+
+        # [조미식품]
+        ("조미식품", "식초", None, None, 5, "ml"),
+        ("조미식품", "소스", None, None, 15, "g"),
+        ("조미식품", "드레싱", None, None, 15, "g"),
+        ("조미식품", "덮밥소스", None, None, 165, "g"),
+        ("조미식품", "마요네즈", None, None, 10, "g"),
+        ("조미식품", "토마토케첩", None, None, 10, "g"),
+        ("조미식품", "카레", "레토르트", None, 200, "g"),
+        ("조미식품", "카레", "기타", None, 25, "g"),
+
+        # [절임류 또는 조림류]
+        ("절임류 또는 조림류", "배추김치", None, None, 40, "g"),
+        ("절임류 또는 조림류", "물김치", None, None, 80, "g"),
+        ("절임류 또는 조림류", "기타김치", None, None, 40, "g"),
+        ("절임류 또는 조림류", "장아찌", None, None, 15, "g"),
+        ("절임류 또는 조림류", "절임", "그밖의해당식품", None, 25, "g"),
+        ("절임류 또는 조림류", "당절임", None, None, 25, "g"),
+
+        # [농산가공식품류]
+        ("농산가공식품류", "땅콩버터", None, None, 5, "g"),
+        ("농산가공식품류", "땅콩또는견과류가공품", None, None, 10, "g"),
+        ("농산가공식품류", "시리얼류", None, None, 30, "g"),
+        ("농산가공식품류", "건과류", None, None, 15, "g"),
+        ("농산가공식품류", "과채가공품", "기타", None, 30, "g"),
+        ("농산가공식품류", "누룽지", None, None, 60, "g"),
+        ("농산가공식품류", "감자튀김", None, None, 40, "g"),
+
+        # [식육가공품]
+        ("식육가공품", "햄", None, None, 30, "g"),
+        ("식육가공품", "프레스햄", None, None, 30, "g"),
+        ("식육가공품", "소시지", None, None, 30, "g"),
+        ("식육가공품", "발효소시지", None, None, 30, "g"),
+        ("식육가공품", "혼합소시지", None, None, 30, "g"),
+        ("식육가공품", "베이컨류", None, None, 30, "g"),
+        ("식육가공품", "건조저장육류", None, None, 15, "g"),
+        ("식육가공품", "양념육", None, None, 100, "g"),
+        ("식육가공품", "분쇄가공육제품", None, None, 50, "g"),
+        ("식육가공품", "갈비가공품", None, None, 100, "g"),
+        ("식육가공품", "식육추출가공품", None, None, 240, "g"),
+        ("식육가공품", "육포", None, None, 15, "g"),
+        ("식육가공품", "식육함유가공품", "기타", None, 50, "g"),
+
+        # [알가공품류]
+        ("알가공품류", "알가공품", None, None, 50, "g"),
+        ("알가공품류", "알함유가공품", None, None, 50, "g"),
+
+        # [유가공품]
+        ("유가공품", "우유", None, None, 200, "ml"),
+        ("유가공품", "환원유", None, None, 200, "ml"),
+        ("유가공품", "가공유류", None, None, 200, "ml"),
+        ("유가공품", "산양유", None, None, 200, "ml"),
+        ("유가공품", "발효유", None, None, 80, "ml"),
+        ("유가공품", "발효유류", "액상", None, 150, "ml"),
+        ("유가공품", "발효유류", "호상", None, 100, "ml"),
+        ("유가공품", "버터", None, None, 5, "g"),
+        ("유가공품", "가공버터", None, None, 5, "g"),
+        ("유가공품", "치즈", None, None, 20, "g"),
+        ("유가공품", "가공치즈", None, None, 20, "g"),
+
+        # [수산가공식품류]
+        ("수산가공식품류", "어육살", None, None, 30, "g"),
+        ("수산가공식품류", "연육", None, None, 30, "g"),
+        ("수산가공식품류", "어육반제품", None, None, 30, "g"),
+        ("수산가공식품류", "어묵", None, None, 30, "g"),
+        ("수산가공식품류", "어육소시지", None, None, 45, "g"),
+        ("수산가공식품류", "기타어육가공품", None, None, 30, "g"),
+        ("수산가공식품류", "조미건어포", None, None, 15, "g"),
+        ("수산가공식품류", "건어포", None, None, 15, "g"),
+        ("수산가공식품류", "기타건포류", None, None, 15, "g"),
+        ("수산가공식품류", "조미김", None, None, 4, "g"),
+        ("수산가공식품류", "김자반", None, None, 5, "g"),
+
+        # [동물성가공식품류]
+        ("동물성가공식품류", "기타식육또는기타알", None, None, 60, "g"),
+        ("동물성가공식품류", "번데기통조림", None, None, 30, "g"),
+        ("동물성가공식품류", "추출가공식품", None, None, 80, "g"),
+
+        # [벌꿀및화분가공품류]
+        ("벌꿀및화분가공품류", "벌꿀류", None, None, 20, "g"),
+
+        # [즉석식품류]
+        ("즉석식품류", "생식류", None, None, 40, "g"),
+        ("즉석식품류", "도시락", None, None, 1, "식"),
+        ("즉석식품류", "김밥류", None, None, 1, "식"),
+        ("즉석식품류", "햄버거", None, None, 150, "g"),
+        ("즉석식품류", "샌드위치류", None, None, 150, "g"),
+        ("즉석식품류", "즉석섭취식품", "기타", None, 1, "식"),
+        ("즉석식품류", "밥", None, None, 210, "g"),
+        ("즉석식품류", "국", None, None, 250, "ml(g)"),
+        ("즉석식품류", "탕", None, None, 250, "ml(g)"),
+        ("즉석식품류", "찌개", None, None, 200, "ml(g)"),
+        ("즉석식품류", "죽", None, None, 250, "ml(g)"),
+        ("즉석식품류", "스프", None, None, 150, "ml(g)"),
+        ("즉석식품류", "만두류", None, None, 150, "g"),
+
+        # [식용란]
+        ("식용란", "식용란", None, None, 50, "g"),
+    ]
+
+    for row in data:
+        cursor.execute("""
+            INSERT INTO serving_size_reference (food_group, food_type, food_subtype, detail, serving_size, unit)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, row)
 
 
 # ===== 검사항목 관련 함수 =====
@@ -1224,6 +1435,115 @@ def has_any_admin() -> bool:
     conn.close()
 
     return result['cnt'] > 0
+
+
+# ========== 1회 섭취참고량 관련 함수 ==========
+
+def get_serving_food_groups() -> list:
+    """모든 식품군 목록 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT food_group FROM serving_size_reference
+        ORDER BY id
+    """)
+
+    results = [row['food_group'] for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def get_serving_food_types(food_group: str) -> list:
+    """식품군별 식품유형 목록 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT food_type FROM serving_size_reference
+        WHERE food_group = ?
+        ORDER BY id
+    """, (food_group,))
+
+    results = [row['food_type'] for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def get_serving_subtypes(food_group: str, food_type: str) -> list:
+    """식품유형별 세부유형 목록 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT DISTINCT food_subtype FROM serving_size_reference
+        WHERE food_group = ? AND food_type = ? AND food_subtype IS NOT NULL
+        ORDER BY id
+    """, (food_group, food_type))
+
+    results = [row['food_subtype'] for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def get_serving_size(food_group: str, food_type: str, food_subtype: str = None) -> dict:
+    """1회 섭취참고량 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if food_subtype:
+        cursor.execute("""
+            SELECT * FROM serving_size_reference
+            WHERE food_group = ? AND food_type = ? AND food_subtype = ?
+        """, (food_group, food_type, food_subtype))
+    else:
+        cursor.execute("""
+            SELECT * FROM serving_size_reference
+            WHERE food_group = ? AND food_type = ? AND (food_subtype IS NULL OR food_subtype = '')
+        """, (food_group, food_type))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def get_serving_size_by_type(food_type: str) -> dict:
+    """식품유형명으로 1회 섭취참고량 조회 (단순 검색)"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM serving_size_reference
+        WHERE food_type = ?
+        LIMIT 1
+    """, (food_type,))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def search_serving_size(keyword: str) -> list:
+    """키워드로 1회 섭취참고량 검색"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    search_term = f"%{keyword}%"
+    cursor.execute("""
+        SELECT * FROM serving_size_reference
+        WHERE food_group LIKE ? OR food_type LIKE ? OR food_subtype LIKE ?
+        ORDER BY food_group, food_type
+    """, (search_term, search_term, search_term))
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
 
 
 # 데이터베이스 초기화 실행

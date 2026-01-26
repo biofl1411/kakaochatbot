@@ -43,7 +43,13 @@ from models import (
     is_admin_user,
     has_any_admin,
     add_admin_user,
-    get_all_admin_users
+    get_all_admin_users,
+    # 1회 섭취참고량 관련
+    get_serving_food_groups,
+    get_serving_food_types,
+    get_serving_subtypes,
+    get_serving_size,
+    search_serving_size
 )
 try:
     from vision_ocr import extract_food_type_from_image, is_vision_api_available
@@ -921,11 +927,11 @@ INSPECTION_MENU = {
         },
         "영양성분검사": {
             "title": "영양성분검사",
-            "buttons": ["검사종류", "표시대상확인", "함량계산", "이전", "처음으로"],
+            "buttons": ["검사종류", "표시대상확인", "계산도우미", "표시단위 계산", "이전", "처음으로"],
             "parent": "검사분야"
         },
-        "함량계산": {
-            "title": "함량계산",
+        "계산도우미": {
+            "title": "계산도우미",
             "buttons": ["배합 함량", "당알코올 계산", "이전", "처음으로"],
             "parent": "영양성분검사"
         },
@@ -1438,6 +1444,103 @@ def health_check():
     })
 
 
+def _calculate_serving_display(user_data: dict):
+    """영양성분 표시단위 계산 결과 반환"""
+    food_group = user_data.get("영양표시_식품군", "")
+    food_type = user_data.get("영양표시_식품유형", "")
+    food_subtype = user_data.get("영양표시_세부유형", "")
+    total_weight = user_data.get("영양표시_총내용량", 0)
+    has_pieces = user_data.get("영양표시_낱개여부", False)
+    piece_weight = user_data.get("영양표시_낱개중량", 0)
+    serving_size = user_data.get("영양표시_1회섭취참고량", 100)
+    unit = user_data.get("영양표시_단위", "g")
+
+    # 입력 정보 요약
+    food_name = f"{food_type}"
+    if food_subtype:
+        food_name += f" ({food_subtype})"
+
+    result_text = f"""📊 영양성분 표시단위 계산 결과
+
+━━━━━━━━━━━━━━━
+📌 입력 정보
+━━━━━━━━━━━━━━━
+• 식품군: {food_group}
+• 식품유형: {food_name}
+• 총 내용량: {total_weight}g(ml)
+• 1회 섭취참고량: {serving_size}{unit}"""
+
+    if has_pieces:
+        result_text += f"\n• 낱개 중량: {piece_weight}g(ml)"
+
+    result_text += "\n\n━━━━━━━━━━━━━━━\n📋 표시 방법 안내\n━━━━━━━━━━━━━━━\n"
+
+    # 표시 규칙 판단
+    display_methods = []
+    reasons = []
+
+    # 기본: 총 내용량(1포장)당 표시
+    display_methods.append("✅ 1포장당(총 내용량당) 표시 - 기본")
+    reasons.append("• 모든 제품은 기본적으로 총 내용량당 표시 가능")
+
+    # 규칙 2: 총 내용량 > 100g AND 총 내용량 > 1회섭취참고량×3 → 100g당 표시 가능
+    if total_weight > 100 and total_weight > serving_size * 3:
+        display_methods.append("✅ 100g(ml)당 표시 가능")
+        reasons.append(f"• 총 내용량({total_weight}g) > 100g 이고")
+        reasons.append(f"  총 내용량({total_weight}g) > 1회섭취참고량×3 ({serving_size}×3={serving_size*3}g)")
+
+    # 낱개 포장이 있는 경우
+    if has_pieces and piece_weight > 0:
+        # 규칙 3: 낱개 ≥ 100g 또는 낱개 ≥ 1회섭취참고량 → 낱개당 표시
+        if piece_weight >= 100 or piece_weight >= serving_size:
+            display_methods.append("✅ 낱개당 표시 가능")
+            if piece_weight >= 100:
+                reasons.append(f"• 낱개 중량({piece_weight}g) ≥ 100g")
+            if piece_weight >= serving_size:
+                reasons.append(f"• 낱개 중량({piece_weight}g) ≥ 1회섭취참고량({serving_size}g)")
+
+        # 규칙 4: 낱개 < 100g AND 낱개 < 1회섭취참고량 → 낱개당 표시 가능 (단, 총내용량당 병행표기 필요)
+        elif piece_weight < 100 and piece_weight < serving_size:
+            display_methods.append("⚠️ 낱개당 표시 가능 (조건부)")
+            reasons.append(f"• 낱개 중량({piece_weight}g) < 100g 이고")
+            reasons.append(f"  낱개 중량({piece_weight}g) < 1회섭취참고량({serving_size}g)")
+            reasons.append("• ⚠️ 총 내용량당 영양성분도 함께 표시 필요!")
+
+    result_text += "\n".join(display_methods)
+    result_text += "\n\n━━━━━━━━━━━━━━━\n📖 판단 근거\n━━━━━━━━━━━━━━━\n"
+    result_text += "\n".join(reasons)
+
+    # 표시 예시
+    result_text += "\n\n━━━━━━━━━━━━━━━\n📝 표시 예시\n━━━━━━━━━━━━━━━\n"
+
+    if has_pieces and piece_weight > 0:
+        pieces_count = int(total_weight / piece_weight)
+        result_text += f"• 총 내용량: {total_weight}g ({piece_weight}g × {pieces_count}개)\n"
+        if piece_weight >= 100 or piece_weight >= serving_size:
+            result_text += f"• 영양성분: 낱개({piece_weight}g)당 표시"
+        else:
+            result_text += f"• 영양성분: 낱개({piece_weight}g)당 + 총 내용량({total_weight}g)당 병행 표시"
+    else:
+        if total_weight > 100 and total_weight > serving_size * 3:
+            result_text += f"• 영양성분: 100g(ml)당 또는 총 내용량({total_weight}g)당 표시"
+        else:
+            result_text += f"• 영양성분: 총 내용량({total_weight}g)당 표시"
+
+    # 상태 초기화
+    user_data.pop("영양표시_모드", None)
+    user_data.pop("영양표시_단계", None)
+    user_data.pop("영양표시_식품군", None)
+    user_data.pop("영양표시_식품유형", None)
+    user_data.pop("영양표시_세부유형", None)
+    user_data.pop("영양표시_총내용량", None)
+    user_data.pop("영양표시_낱개여부", None)
+    user_data.pop("영양표시_낱개중량", None)
+    user_data.pop("영양표시_1회섭취참고량", None)
+    user_data.pop("영양표시_단위", None)
+
+    return make_response(result_text, ["표시단위 계산", "이전", "처음으로"])
+
+
 @app.route('/chatbot', methods=['POST'])
 def chatbot():
     """카카오 챗봇 메인 엔드포인트"""
@@ -1524,16 +1627,16 @@ def chatbot():
                         ["검사분야", "검사주기", "검사항목"]
                     )
 
-            # 계산 모드에서 이전 -> 함량계산 메뉴로
+            # 계산 모드에서 이전 -> 계산도우미 메뉴로
             if user_data.get("계산_모드"):
                 user_data.pop("계산_모드", None)
                 user_data.pop("계산_단계", None)
                 user_data.pop("총중량", None)
                 user_data.pop("당알코올_배합함량", None)
                 user_data.pop("당알코올_원재료함량", None)
-                user_data["현재_메뉴"] = "함량계산"
+                user_data["현재_메뉴"] = "계산도우미"
                 return make_response(
-                    "📊 함량계산\n\n원하시는 계산 방법을 선택해주세요.",
+                    "📊 계산도우미\n\n원하시는 계산 방법을 선택해주세요.",
                     ["배합 함량", "당알코올 계산", "이전", "처음으로"]
                 )
 
@@ -1545,6 +1648,25 @@ def chatbot():
                 user_data.pop("표시대상_카테고리", None)
                 user_data.pop("표시대상_배추김치", None)
                 user_data.pop("표시대상_개정정보", None)
+                submenu = INSPECTION_MENU["submenus"]["영양성분검사"]
+                user_data["현재_메뉴"] = "영양성분검사"
+                return make_response(
+                    f"📋 {submenu['title']}\n\n원하시는 항목을 선택해주세요.",
+                    submenu["buttons"]
+                )
+
+            # 영양표시(표시단위 계산) 모드에서 이전 -> 영양성분검사 메뉴로
+            if user_data.get("영양표시_모드"):
+                user_data.pop("영양표시_모드", None)
+                user_data.pop("영양표시_단계", None)
+                user_data.pop("영양표시_식품군", None)
+                user_data.pop("영양표시_식품유형", None)
+                user_data.pop("영양표시_세부유형", None)
+                user_data.pop("영양표시_총내용량", None)
+                user_data.pop("영양표시_낱개여부", None)
+                user_data.pop("영양표시_낱개중량", None)
+                user_data.pop("영양표시_1회섭취참고량", None)
+                user_data.pop("영양표시_단위", None)
                 submenu = INSPECTION_MENU["submenus"]["영양성분검사"]
                 user_data["현재_메뉴"] = "영양성분검사"
                 return make_response(
@@ -1736,16 +1858,16 @@ def chatbot():
                 submenu["buttons"]
             )
 
-        # ===== 영양성분검사 > 함량계산 선택 시 하위메뉴 표시 =====
-        if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input == "함량계산":
-            user_data["현재_메뉴"] = "함량계산"
+        # ===== 영양성분검사 > 계산도우미 선택 시 하위메뉴 표시 =====
+        if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input == "계산도우미":
+            user_data["현재_메뉴"] = "계산도우미"
             return make_response(
-                "📊 함량계산\n\n원하시는 계산 방법을 선택해주세요.",
+                "📊 계산도우미\n\n원하시는 계산 방법을 선택해주세요.",
                 ["배합 함량", "당알코올 계산", "이전", "처음으로"]
             )
 
-        # ===== 영양성분검사 > 함량계산 > 배합 함량 =====
-        # 함량계산 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
+        # ===== 영양성분검사 > 계산도우미 > 배합 함량 =====
+        # 계산도우미 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
         if user_input == "배합 함량":
             user_data["계산_모드"] = "배합함량"
             user_data["계산_단계"] = "총중량_입력"
@@ -1876,8 +1998,8 @@ def chatbot():
 
                 return make_response(response_text, ["배합 함량", "이전", "처음으로"])
 
-        # ===== 영양성분검사 > 함량계산 > 당알코올 계산 =====
-        # 함량계산 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
+        # ===== 영양성분검사 > 계산도우미 > 당알코올 계산 =====
+        # 계산도우미 메뉴에서 선택하거나, 계산 결과 후 다시 선택 시 모두 처리
         if user_input == "당알코올 계산":
             user_data["계산_모드"] = "당알코올"
             user_data["계산_단계"] = "배합함량_입력"
@@ -2053,6 +2175,175 @@ def chatbot():
                 except ValueError:
                     return make_response(
                         "❌ 숫자를 입력해주세요.\n\n예: 70.5",
+                        ["이전", "처음으로"]
+                    )
+
+        # ===== 영양성분검사 > 표시단위 계산 선택 시 (대화형) =====
+        if user_data.get("검사분야_메뉴") == "영양성분검사" and user_input == "표시단위 계산":
+            user_data["영양표시_모드"] = True
+            user_data["영양표시_단계"] = "식품군_선택"
+            user_data.pop("현재_메뉴", None)
+
+            food_groups = get_serving_food_groups()
+            # 버튼 개수 제한 (최대 10개씩)
+            buttons = food_groups[:9] + ["이전", "처음으로"]
+
+            response_text = """📊 영양성분 표시단위 계산
+
+영양성분을 어떤 단위로 표시해야 하는지 안내해드립니다.
+
+━━━━━━━━━━━━━━━
+📌 표시 단위 종류
+━━━━━━━━━━━━━━━
+• 1포장당 (총 내용량당)
+• 100g(ml)당
+• 1회 섭취참고량당
+• 낱개당
+
+━━━━━━━━━━━━━━━
+🔍 식품군을 선택해주세요."""
+
+            return make_response(response_text, buttons)
+
+        # ===== 표시단위 계산 진행 =====
+        if user_data.get("영양표시_모드"):
+            step = user_data.get("영양표시_단계")
+
+            # 식품군 선택 단계
+            if step == "식품군_선택":
+                food_groups = get_serving_food_groups()
+                if user_input in food_groups:
+                    user_data["영양표시_식품군"] = user_input
+                    user_data["영양표시_단계"] = "식품유형_선택"
+
+                    food_types = get_serving_food_types(user_input)
+                    buttons = food_types[:9] + ["이전", "처음으로"]
+
+                    return make_response(
+                        f"📋 [{user_input}]\n\n식품유형을 선택해주세요.",
+                        buttons
+                    )
+                else:
+                    # 더보기 또는 다른 식품군
+                    if user_input == "더보기":
+                        more_groups = get_serving_food_groups()[9:]
+                        buttons = more_groups[:9] + ["이전", "처음으로"]
+                        return make_response(
+                            "🔍 다른 식품군을 선택해주세요.",
+                            buttons
+                        )
+                    return make_response(
+                        "❌ 목록에서 식품군을 선택해주세요.",
+                        food_groups[:9] + ["이전", "처음으로"]
+                    )
+
+            # 식품유형 선택 단계
+            if step == "식품유형_선택":
+                food_group = user_data.get("영양표시_식품군")
+                food_types = get_serving_food_types(food_group)
+
+                if user_input in food_types:
+                    user_data["영양표시_식품유형"] = user_input
+
+                    # 세부유형이 있는지 확인
+                    subtypes = get_serving_subtypes(food_group, user_input)
+                    if subtypes:
+                        user_data["영양표시_단계"] = "세부유형_선택"
+                        buttons = subtypes + ["이전", "처음으로"]
+                        return make_response(
+                            f"📋 [{user_input}]\n\n세부유형을 선택해주세요.",
+                            buttons
+                        )
+                    else:
+                        # 세부유형 없으면 바로 총내용량 입력
+                        user_data["영양표시_단계"] = "총내용량_입력"
+                        serving = get_serving_size(food_group, user_input)
+                        if serving:
+                            user_data["영양표시_1회섭취참고량"] = serving['serving_size']
+                            user_data["영양표시_단위"] = serving['unit']
+
+                        return make_response(
+                            f"📋 [{user_input}]\n\n제품의 총 내용량(g 또는 ml)을 입력해주세요.\n\n예: 500",
+                            ["이전", "처음으로"]
+                        )
+                else:
+                    return make_response(
+                        "❌ 목록에서 식품유형을 선택해주세요.",
+                        food_types[:9] + ["이전", "처음으로"]
+                    )
+
+            # 세부유형 선택 단계
+            if step == "세부유형_선택":
+                food_group = user_data.get("영양표시_식품군")
+                food_type = user_data.get("영양표시_식품유형")
+                subtypes = get_serving_subtypes(food_group, food_type)
+
+                if user_input in subtypes:
+                    user_data["영양표시_세부유형"] = user_input
+                    user_data["영양표시_단계"] = "총내용량_입력"
+
+                    serving = get_serving_size(food_group, food_type, user_input)
+                    if serving:
+                        user_data["영양표시_1회섭취참고량"] = serving['serving_size']
+                        user_data["영양표시_단위"] = serving['unit']
+
+                    return make_response(
+                        f"📋 [{food_type} - {user_input}]\n\n제품의 총 내용량(g 또는 ml)을 입력해주세요.\n\n예: 500",
+                        ["이전", "처음으로"]
+                    )
+                else:
+                    return make_response(
+                        "❌ 목록에서 세부유형을 선택해주세요.",
+                        subtypes + ["이전", "처음으로"]
+                    )
+
+            # 총 내용량 입력 단계
+            if step == "총내용량_입력":
+                try:
+                    total_weight = float(user_input.replace("g", "").replace("ml", "").replace(",", "").strip())
+                    user_data["영양표시_총내용량"] = total_weight
+                    user_data["영양표시_단계"] = "낱개여부_선택"
+
+                    return make_response(
+                        f"📋 총 내용량: {total_weight}g(ml)\n\n제품이 낱개로 나눌 수 있나요?\n(예: 개별포장 과자, 낱개 떡 등)",
+                        ["예", "아니오", "이전", "처음으로"]
+                    )
+                except ValueError:
+                    return make_response(
+                        "❌ 숫자를 입력해주세요.\n\n예: 500",
+                        ["이전", "처음으로"]
+                    )
+
+            # 낱개 여부 선택 단계
+            if step == "낱개여부_선택":
+                if user_input == "예":
+                    user_data["영양표시_낱개여부"] = True
+                    user_data["영양표시_단계"] = "낱개중량_입력"
+
+                    return make_response(
+                        "📋 낱개 1개당 중량(g 또는 ml)을 입력해주세요.\n\n예: 25",
+                        ["이전", "처음으로"]
+                    )
+                elif user_input == "아니오":
+                    user_data["영양표시_낱개여부"] = False
+                    # 바로 결과 계산
+                    return _calculate_serving_display(user_data)
+                else:
+                    return make_response(
+                        "❌ [예] 또는 [아니오]를 선택해주세요.",
+                        ["예", "아니오", "이전", "처음으로"]
+                    )
+
+            # 낱개 중량 입력 단계
+            if step == "낱개중량_입력":
+                try:
+                    piece_weight = float(user_input.replace("g", "").replace("ml", "").replace(",", "").strip())
+                    user_data["영양표시_낱개중량"] = piece_weight
+                    # 결과 계산
+                    return _calculate_serving_display(user_data)
+                except ValueError:
+                    return make_response(
+                        "❌ 숫자를 입력해주세요.\n\n예: 25",
                         ["이전", "처음으로"]
                     )
 
