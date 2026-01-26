@@ -769,6 +769,69 @@ def chatbot():
             log_unanswered_question(user_input, user_id)
             logger.info(f"[{user_id}] 미답변 로깅: {user_input}")
 
+        # ===== 검사분야 캐러셀 응답 =====
+        if user_input == "검사분야":
+            logger.info(f"[{user_id}] 검사분야 캐러셀 반환")
+            carousel_response = {
+                "version": "2.0",
+                "template": {
+                    "outputs": [
+                        {
+                            "carousel": {
+                                "type": "basicCard",
+                                "items": [
+                                    {
+                                        "title": "자가품질검사",
+                                        "description": "식품/축산물 자가품질검사",
+                                        "buttons": [
+                                            {"label": "자가품질검사", "action": "message", "messageText": "자가품질검사"}
+                                        ]
+                                    },
+                                    {
+                                        "title": "영양성분검사",
+                                        "description": "영양성분표시, 영양강조표시 검사",
+                                        "buttons": [
+                                            {"label": "영양성분검사", "action": "message", "messageText": "영양성분검사"}
+                                        ]
+                                    },
+                                    {
+                                        "title": "소비기한설정",
+                                        "description": "유통기한/소비기한 설정 검사",
+                                        "buttons": [
+                                            {"label": "소비기한설정", "action": "message", "messageText": "소비기한설정"}
+                                        ]
+                                    },
+                                    {
+                                        "title": "항생물질/잔류농약/방사능",
+                                        "description": "안전성 검사",
+                                        "buttons": [
+                                            {"label": "항생물질", "action": "message", "messageText": "항생물질"},
+                                            {"label": "잔류농약", "action": "message", "messageText": "잔류농약"},
+                                            {"label": "방사능", "action": "message", "messageText": "방사능"}
+                                        ]
+                                    },
+                                    {
+                                        "title": "기타검사",
+                                        "description": "비건/할랄/DNA/알레르기/글루텐/이물질",
+                                        "buttons": [
+                                            {"label": "비건", "action": "message", "messageText": "비건"},
+                                            {"label": "할랄", "action": "message", "messageText": "할랄"},
+                                            {"label": "이물질검사", "action": "message", "messageText": "이물질검사"}
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ],
+                    "quickReplies": [
+                        {"label": "검사주기", "action": "message", "messageText": "검사주기"},
+                        {"label": "검사항목", "action": "message", "messageText": "검사항목"},
+                        {"label": "처음으로", "action": "message", "messageText": "처음으로"}
+                    ]
+                }
+            }
+            return jsonify(carousel_response)
+
         # ===== Open Builder 메뉴 키워드는 스킬에서 응답하지 않음 =====
         # Open Builder 블록에서 캐러셀/버튼 응답을 직접 처리하도록 빈 응답 반환
         if user_input in EXCLUDED_KEYWORDS:
