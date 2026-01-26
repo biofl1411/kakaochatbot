@@ -64,6 +64,22 @@ CORS(app)
 # 사용자 상태 저장 (세션 관리)
 user_state = {}
 
+# Q&A 검색에서 제외할 Open Builder 메뉴 키워드
+# (카카오 i 오픈빌더에서 캐러셀/버튼으로 처리되는 키워드)
+EXCLUDED_KEYWORDS = {
+    # 메인 메뉴
+    "검사분야", "검사주기", "검사항목",
+    # 검사분야 캐러셀 메뉴
+    "자가품질검사", "영양성분검사", "소비기한설정",
+    "항생물질", "잔류농약", "방사능",
+    "비건", "할랄", "동물DNA",
+    "알레르기", "글루텐Free", "이물질검사",
+    # 하위 메뉴
+    "홈페이지안내", "성적서문의", "시료접수안내",
+    # 기타 시스템 키워드
+    "처음으로", "종료", "확인", "취소",
+}
+
 
 def handle_admin_command(user_id: str, command: str) -> str:
     """관리자 명령어 처리"""
@@ -740,14 +756,16 @@ def chatbot():
                     return make_response(response_text, ["종료"])
 
         # ===== Q&A 검색 =====
-        qa_result = search_qa_response(user_input)
-        if qa_result:
-            logger.info(f"[{user_id}] Q&A 매칭: #{qa_result['id']} - {qa_result['question']}")
-            return make_response(qa_result['answer'], ["검사주기", "검사항목", "처음으로"])
+        # Open Builder 메뉴 키워드는 Q&A 검색에서 제외 (캐러셀/버튼으로 처리됨)
+        if user_input not in EXCLUDED_KEYWORDS:
+            qa_result = search_qa_response(user_input)
+            if qa_result:
+                logger.info(f"[{user_id}] Q&A 매칭: #{qa_result['id']} - {qa_result['question']}")
+                return make_response(qa_result['answer'], ["검사주기", "검사항목", "처음으로"])
 
         # ===== 미답변 질문 로깅 =====
-        # 의미 있는 질문인 경우만 로깅 (2글자 이상, 특수 명령 제외)
-        if len(user_input) >= 2 and not user_input.startswith("!"):
+        # 의미 있는 질문인 경우만 로깅 (2글자 이상, 특수 명령/메뉴 키워드 제외)
+        if len(user_input) >= 2 and not user_input.startswith("!") and user_input not in EXCLUDED_KEYWORDS:
             log_unanswered_question(user_input, user_id)
             logger.info(f"[{user_id}] 미답변 로깅: {user_input}")
 
