@@ -849,7 +849,7 @@ def delete_qa_response(qa_id: int) -> bool:
     return affected > 0
 
 
-def search_qa_response(search_text: str, min_score: int = 50) -> dict:
+def search_qa_response(search_text: str, min_score: int = 90) -> dict:
     """Q&A 검색 - 사용자 질문과 가장 유사한 답변 찾기"""
     conn = get_connection()
     cursor = conn.cursor()
