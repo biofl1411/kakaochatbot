@@ -226,6 +226,43 @@ def init_database():
     conn.close()
 
 
+def refresh_reference_data():
+    """
+    참조 데이터만 갱신 (Q&A 등 사용자 데이터는 보존)
+
+    갱신 대상:
+    - daily_value (1일 영양성분 기준치)
+    - nutrient_claims (영양강조표시 기준)
+    - rounding_rules (반올림 규칙)
+    - serving_size_reference (1회 섭취참고량)
+
+    보존 대상:
+    - qa_responses (Q&A 질문-답변)
+    - unanswered_questions (미답변 질문)
+    - admin_users (관리자)
+    - 기타 사용자 데이터
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # 참조 데이터 테이블만 초기화 후 재삽입
+    reference_tables = [
+        ('daily_value', _insert_daily_value_data),
+        ('nutrient_claims', _insert_nutrient_claims_data),
+        ('rounding_rules', _insert_rounding_rules_data),
+        ('serving_size_reference', _insert_serving_size_data),
+    ]
+
+    for table_name, insert_func in reference_tables:
+        cursor.execute(f"DELETE FROM {table_name}")
+        insert_func(cursor)
+        print(f"✓ {table_name} 테이블 갱신 완료")
+
+    conn.commit()
+    conn.close()
+    print("\n참조 데이터 갱신이 완료되었습니다. (Q&A 데이터 보존됨)")
+
+
 def _insert_serving_size_data(cursor):
     """1회 섭취참고량 초기 데이터 삽입"""
     data = [
