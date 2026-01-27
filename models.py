@@ -165,6 +165,63 @@ def init_database():
     if cursor.fetchone()['cnt'] == 0:
         _insert_serving_size_data(cursor)
 
+    # ========== 영양성분 표시 도우미 테이블 ==========
+
+    # 1일 영양성분 기준치 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS daily_value (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nutrient TEXT NOT NULL UNIQUE,
+            daily_value REAL NOT NULL,
+            unit TEXT NOT NULL,
+            display_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 영양강조표시 기준 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nutrient_claims (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nutrient TEXT NOT NULL,
+            claim_type TEXT NOT NULL,
+            condition TEXT NOT NULL,
+            threshold REAL,
+            unit TEXT,
+            per_basis TEXT DEFAULT '100g',
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nutrient, claim_type)
+        )
+    """)
+
+    # 반올림 규칙 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rounding_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nutrient TEXT NOT NULL UNIQUE,
+            rule_type TEXT NOT NULL,
+            decimal_places INTEGER DEFAULT 0,
+            round_to INTEGER,
+            zero_threshold REAL,
+            note TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # 초기 데이터 삽입
+    cursor.execute("SELECT COUNT(*) as cnt FROM daily_value")
+    if cursor.fetchone()['cnt'] == 0:
+        _insert_daily_value_data(cursor)
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM nutrient_claims")
+    if cursor.fetchone()['cnt'] == 0:
+        _insert_nutrient_claims_data(cursor)
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM rounding_rules")
+    if cursor.fetchone()['cnt'] == 0:
+        _insert_rounding_rules_data(cursor)
+
     conn.commit()
     conn.close()
 
@@ -357,6 +414,137 @@ def _insert_serving_size_data(cursor):
     for row in data:
         cursor.execute("""
             INSERT INTO serving_size_reference (food_group, food_type, food_subtype, detail, serving_size, unit)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, row)
+
+
+def _insert_daily_value_data(cursor):
+    """1일 영양성분 기준치 초기 데이터 삽입"""
+    data = [
+        # (영양소, 기준치, 단위, 표시순서)
+        ("열량", 2000, "kcal", 1),
+        ("탄수화물", 324, "g", 2),
+        ("당류", 100, "g", 3),
+        ("식이섬유", 25, "g", 4),
+        ("단백질", 55, "g", 5),
+        ("지방", 54, "g", 6),
+        ("포화지방", 15, "g", 7),
+        ("트랜스지방", None, "g", 8),  # 기준치 없음
+        ("콜레스테롤", 300, "mg", 9),
+        ("나트륨", 2000, "mg", 10),
+        ("칼륨", 3500, "mg", 11),
+        ("비타민A", 700, "μg RAE", 12),
+        ("비타민D", 10, "μg", 13),
+        ("비타민E", 11, "mg α-TE", 14),
+        ("비타민K", 70, "μg", 15),
+        ("비타민C", 100, "mg", 16),
+        ("비타민B1", 1.2, "mg", 17),
+        ("비타민B2", 1.4, "mg", 18),
+        ("나이아신", 15, "mg NE", 19),
+        ("비타민B6", 1.5, "mg", 20),
+        ("엽산", 400, "μg DFE", 21),
+        ("비타민B12", 2.4, "μg", 22),
+        ("비오틴", 30, "μg", 23),
+        ("판토텐산", 5, "mg", 24),
+        ("칼슘", 700, "mg", 25),
+        ("인", 700, "mg", 26),
+        ("마그네슘", 315, "mg", 27),
+        ("철", 12, "mg", 28),
+        ("아연", 8.5, "mg", 29),
+        ("구리", 0.8, "mg", 30),
+        ("망간", 3.0, "mg", 31),
+        ("요오드", 150, "μg", 32),
+        ("셀레늄", 55, "μg", 33),
+        ("몰리브덴", 25, "μg", 34),
+        ("크롬", 30, "μg", 35),
+    ]
+
+    for row in data:
+        nutrient, dv, unit, order = row
+        if dv is not None:
+            cursor.execute("""
+                INSERT INTO daily_value (nutrient, daily_value, unit, display_order)
+                VALUES (?, ?, ?, ?)
+            """, (nutrient, dv, unit, order))
+        else:
+            # 기준치 없는 영양소는 0으로 저장
+            cursor.execute("""
+                INSERT INTO daily_value (nutrient, daily_value, unit, display_order)
+                VALUES (?, 0, ?, ?)
+            """, (nutrient, unit, order))
+
+
+def _insert_nutrient_claims_data(cursor):
+    """영양강조표시 기준 초기 데이터 삽입"""
+    data = [
+        # 열량
+        ("열량", "무", "40kcal 미만", 40, "kcal", "100g", None),
+        ("열량", "저", "40kcal 이하", 40, "kcal", "100g", "음료는 20kcal 이하/100ml"),
+
+        # 지방
+        ("지방", "무", "0.5g 미만", 0.5, "g", "100g", None),
+        ("지방", "저", "3g 이하", 3, "g", "100g", None),
+
+        # 포화지방
+        ("포화지방", "무", "0.1g 미만 + 트랜스지방 0.5g 미만", 0.1, "g", "100g", "트랜스지방도 함께 체크"),
+        ("포화지방", "저", "1.5g 이하 + 열량의 10% 이하", 1.5, "g", "100g", "열량 기준도 함께 체크"),
+
+        # 콜레스테롤
+        ("콜레스테롤", "무", "5mg 미만 + 포화지방 1.5g 이하", 5, "mg", "100g", "포화지방도 함께 체크"),
+        ("콜레스테롤", "저", "20mg 이하 + 포화지방 1.5g 이하", 20, "mg", "100g", "포화지방도 함께 체크"),
+
+        # 나트륨
+        ("나트륨", "무", "5mg 미만", 5, "mg", "100g", None),
+        ("나트륨", "저", "120mg 이하", 120, "mg", "100g", None),
+
+        # 당류
+        ("당류", "무", "0.5g 미만", 0.5, "g", "100g", None),
+        ("당류", "저", "5g 이하", 5, "g", "100g", None),
+        ("당류", "무가당", "당류 무첨가 + 0.5g 미만", 0.5, "g", "100g", "당류를 첨가하지 않은 경우"),
+
+        # 식이섬유
+        ("식이섬유", "함유", "3g 이상", 3, "g", "100g", "1회섭취참고량 기준 가능"),
+        ("식이섬유", "고", "6g 이상", 6, "g", "100g", "1회섭취참고량 기준 가능"),
+
+        # 단백질
+        ("단백질", "함유", "1일기준치 10% 이상", 5.5, "g", "100g", "55g의 10%"),
+        ("단백질", "고", "1일기준치 20% 이상", 11, "g", "100g", "55g의 20%"),
+
+        # 비타민/무기질 (대표적인 것들)
+        ("비타민C", "함유", "1일기준치 15% 이상", 15, "mg", "100g", "100mg의 15%"),
+        ("비타민C", "고", "1일기준치 30% 이상", 30, "mg", "100g", "100mg의 30%"),
+        ("칼슘", "함유", "1일기준치 15% 이상", 105, "mg", "100g", "700mg의 15%"),
+        ("칼슘", "고", "1일기준치 30% 이상", 210, "mg", "100g", "700mg의 30%"),
+        ("철", "함유", "1일기준치 15% 이상", 1.8, "mg", "100g", "12mg의 15%"),
+        ("철", "고", "1일기준치 30% 이상", 3.6, "mg", "100g", "12mg의 30%"),
+    ]
+
+    for row in data:
+        cursor.execute("""
+            INSERT INTO nutrient_claims (nutrient, claim_type, condition, threshold, unit, per_basis, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, row)
+
+
+def _insert_rounding_rules_data(cursor):
+    """반올림 규칙 초기 데이터 삽입"""
+    data = [
+        # (영양소, 규칙유형, 소수점자리, 반올림단위, 0표시기준, 비고)
+        ("열량", "round_to_nearest", 0, 5, 5, "5kcal 단위로 반올림, 5kcal 미만은 0"),
+        ("탄수화물", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("당류", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("식이섬유", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("단백질", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
+        ("포화지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
+        ("트랜스지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
+        ("콜레스테롤", "round_to_nearest", 0, 5, 2, "5mg 단위로 반올림, 2mg 미만은 0"),
+        ("나트륨", "round_to_nearest", 0, 5, 5, "5mg 단위로 반올림, 5mg 미만은 0"),
+    ]
+
+    for row in data:
+        cursor.execute("""
+            INSERT INTO rounding_rules (nutrient, rule_type, decimal_places, round_to, zero_threshold, note)
             VALUES (?, ?, ?, ?, ?, ?)
         """, row)
 
@@ -1544,6 +1732,249 @@ def search_serving_size(keyword: str) -> list:
     conn.close()
 
     return results
+
+
+# ========== 1일 영양성분 기준치 관련 함수 ==========
+
+def get_daily_value(nutrient: str) -> dict:
+    """특정 영양소의 1일 기준치 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM daily_value WHERE nutrient = ?
+    """, (nutrient,))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def get_all_daily_values() -> list:
+    """모든 1일 영양성분 기준치 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM daily_value ORDER BY display_order
+    """)
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def search_daily_value(keyword: str) -> list:
+    """키워드로 1일 기준치 검색"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM daily_value WHERE nutrient LIKE ?
+        ORDER BY display_order
+    """, (f"%{keyword}%",))
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def calculate_percent_daily_value(nutrient: str, amount: float) -> float:
+    """영양소 함량의 %기준치 계산"""
+    dv = get_daily_value(nutrient)
+    if not dv or dv['daily_value'] == 0:
+        return None  # 기준치가 없는 경우
+
+    percent = (amount / dv['daily_value']) * 100
+    return round(percent, 1)
+
+
+# ========== 영양강조표시 관련 함수 ==========
+
+def get_nutrient_claim(nutrient: str, claim_type: str) -> dict:
+    """특정 영양소의 강조표시 기준 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM nutrient_claims WHERE nutrient = ? AND claim_type = ?
+    """, (nutrient, claim_type))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def get_all_claims_for_nutrient(nutrient: str) -> list:
+    """특정 영양소의 모든 강조표시 기준 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM nutrient_claims WHERE nutrient = ?
+    """, (nutrient,))
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def get_all_nutrient_claims() -> list:
+    """모든 영양강조표시 기준 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM nutrient_claims ORDER BY nutrient, claim_type
+    """)
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def check_nutrient_claim(nutrient: str, amount: float, per_100g: bool = True) -> list:
+    """
+    영양소 함량이 어떤 강조표시에 해당하는지 확인
+
+    Args:
+        nutrient: 영양소명
+        amount: 함량 (100g당 또는 1회 섭취량당)
+        per_100g: True면 100g 기준, False면 1회 섭취참고량 기준
+
+    Returns:
+        해당하는 강조표시 목록
+    """
+    claims = get_all_claims_for_nutrient(nutrient)
+    if not claims:
+        return []
+
+    applicable = []
+    for claim in claims:
+        threshold = claim['threshold']
+        claim_type = claim['claim_type']
+
+        # 무/저 타입은 threshold 미만/이하
+        if claim_type in ['무', '저', '무가당']:
+            if amount < threshold:
+                applicable.append(claim)
+        # 함유/고 타입은 threshold 이상
+        elif claim_type in ['함유', '고']:
+            if amount >= threshold:
+                applicable.append(claim)
+
+    return applicable
+
+
+# ========== 반올림 규칙 관련 함수 ==========
+
+def get_rounding_rule(nutrient: str) -> dict:
+    """특정 영양소의 반올림 규칙 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM rounding_rules WHERE nutrient = ?
+    """, (nutrient,))
+
+    result = cursor.fetchone()
+    conn.close()
+
+    return dict(result) if result else None
+
+
+def get_all_rounding_rules() -> list:
+    """모든 반올림 규칙 조회"""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM rounding_rules
+    """)
+
+    results = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return results
+
+
+def apply_rounding_rule(nutrient: str, amount: float) -> str:
+    """
+    영양소 함량에 반올림 규칙 적용
+
+    Args:
+        nutrient: 영양소명
+        amount: 원래 함량
+
+    Returns:
+        표시용 문자열 (예: "0", "15", "2.5")
+    """
+    rule = get_rounding_rule(nutrient)
+
+    if not rule:
+        # 규칙이 없으면 기본 반올림 (정수)
+        return str(round(amount))
+
+    zero_threshold = rule['zero_threshold']
+    round_to = rule['round_to']
+    decimal_places = rule['decimal_places']
+
+    # 0 표시 기준 미만이면 0 반환
+    if amount < zero_threshold:
+        return "0"
+
+    # 지방류 특수 규칙 (0.5g 이상 5g 미만은 0.5g 단위)
+    if nutrient in ['지방', '포화지방', '트랜스지방']:
+        if amount < 5:
+            # 0.5g 단위로 반올림
+            rounded = round(amount * 2) / 2
+            return f"{rounded:.1f}"
+        else:
+            # 1g 단위로 반올림
+            return str(round(amount))
+
+    # 일반 반올림
+    if round_to:
+        # 특정 단위로 반올림 (예: 5 단위)
+        rounded = round(amount / round_to) * round_to
+        if decimal_places == 0:
+            return str(int(rounded))
+        else:
+            return f"{rounded:.{decimal_places}f}"
+    else:
+        # 소수점 자리수에 맞춰 반올림
+        if decimal_places == 0:
+            return str(round(amount))
+        else:
+            return f"{round(amount, decimal_places):.{decimal_places}f}"
+
+
+def get_display_value(nutrient: str, amount: float) -> dict:
+    """
+    영양소의 표시값 계산 (반올림 + %기준치)
+
+    Returns:
+        {
+            'display': 표시값 문자열,
+            'percent_dv': %기준치 (있는 경우),
+            'rule_note': 적용된 규칙 설명
+        }
+    """
+    display = apply_rounding_rule(nutrient, amount)
+    percent_dv = calculate_percent_daily_value(nutrient, amount)
+    rule = get_rounding_rule(nutrient)
+
+    return {
+        'display': display,
+        'percent_dv': round(percent_dv) if percent_dv else None,
+        'rule_note': rule['note'] if rule else None
+    }
 
 
 # 데이터베이스 초기화 실행
