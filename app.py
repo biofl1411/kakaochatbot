@@ -2569,13 +2569,10 @@ def chatbot():
                     response_text = f"""📊 1일 영양성분 기준치 (전체)
 
 ━━━━━━━━━━━━━━━
-{dv_text}
-
-━━━━━━━━━━━━━━━
-※ 트랜스지방은 기준치 없음"""
+{dv_text}"""
 
                 elif user_input == "열량/3대영양소":
-                    nutrients = ["열량", "탄수화물", "당류", "식이섬유", "단백질", "지방"]
+                    nutrients = ["탄수화물", "당류", "식이섬유", "단백질", "지방"]
                     dv_text = ""
                     for n in nutrients:
                         dv = get_daily_value(n)
@@ -2588,15 +2585,12 @@ def chatbot():
 {dv_text}"""
 
                 elif user_input == "지방류":
-                    nutrients = ["지방", "포화지방", "트랜스지방", "콜레스테롤"]
+                    nutrients = ["지방", "리놀레산", "알파-리놀렌산", "EPA와 DHA의 합", "포화지방", "콜레스테롤"]
                     dv_text = ""
                     for n in nutrients:
                         dv = get_daily_value(n)
                         if dv:
-                            if dv['daily_value'] > 0:
-                                dv_text += f"• {dv['nutrient']}: {dv['daily_value']} {dv['unit']}\n"
-                            else:
-                                dv_text += f"• {dv['nutrient']}: 기준치 없음\n"
+                            dv_text += f"• {dv['nutrient']}: {dv['daily_value']} {dv['unit']}\n"
 
                     response_text = f"""📊 1일 영양성분 기준치 (지방류)
 
@@ -2659,7 +2653,7 @@ def chatbot():
 
 ━━━━━━━━━━━━━━━
 🔽 영양소를 선택해주세요""",
-                ["열량", "탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨", "이전", "처음으로"]
+                ["탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨", "이전", "처음으로"]
             )
 
         # ===== %기준치 계산 진행 =====
@@ -2668,13 +2662,13 @@ def chatbot():
 
             # 영양소 선택 단계
             if step == "영양소_선택":
-                valid_nutrients = ["열량", "탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨"]
+                valid_nutrients = ["탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨"]
                 if user_input in valid_nutrients:
                     user_data["퍼센트기준치_영양소"] = user_input
                     user_data["퍼센트기준치_단계"] = "함량_입력"
 
                     dv = get_daily_value(user_input)
-                    dv_text = f"{dv['daily_value']} {dv['unit']}" if dv and dv['daily_value'] > 0 else "기준치 없음"
+                    dv_text = f"{dv['daily_value']} {dv['unit']}" if dv else "기준치 없음"
 
                     return make_response(
                         f"""📊 [{user_input}] %기준치 계산
@@ -2692,7 +2686,7 @@ def chatbot():
                 else:
                     return make_response(
                         "❌ 목록에서 영양소를 선택해주세요.",
-                        ["열량", "탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨", "이전", "처음으로"]
+                        ["탄수화물", "당류", "식이섬유", "단백질", "지방", "포화지방", "콜레스테롤", "나트륨", "이전", "처음으로"]
                     )
 
             # 함량 입력 단계
