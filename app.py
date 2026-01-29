@@ -3122,16 +3122,14 @@ def chatbot():
                     user_data.pop("표시값변환_단계", None)
                     user_data.pop("표시값변환_영양소", None)
 
-                    unit = dv['unit'] if dv else ""
-                    # 단위 정리 (kcal, g, mg 등 기본 단위만 표시)
-                    if "kcal" in unit:
-                        display_unit = "kcal"
-                    elif "mg" in unit:
-                        display_unit = "mg"
-                    elif "μg" in unit:
-                        display_unit = "μg"
-                    else:
-                        display_unit = "g"
+                    # 영양소별 단위 매핑
+                    unit_map = {
+                        "열량": "kcal",
+                        "콜레스테롤": "mg",
+                        "나트륨": "mg",
+                    }
+                    # 기본값은 g
+                    display_unit = unit_map.get(nutrient, "g")
 
                     response_text = f"""📊 표시값 변환 결과
 

@@ -616,7 +616,7 @@ def _insert_rounding_rules_data(cursor):
     """반올림 규칙 초기 데이터 삽입"""
     data = [
         # (영양소, 규칙유형, 소수점자리, 반올림단위, 0표시기준, 비고)
-        ("열량", "round_to_nearest", 0, 5, 5, "5kcal 단위로 반올림, 5kcal 미만은 0"),
+        ("열량", "round_to_nearest", 0, 5, 5, "그 값을 그대로 표시하거나 5kcal 단위로, 5kcal 미만은 0"),
         ("탄수화물", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
         ("당류", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
         ("식이섬유", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
