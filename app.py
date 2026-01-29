@@ -3615,7 +3615,7 @@ def chatbot():
 • 산출 탄수화물: {탄수화물}g
 • 표시값: {result['display']} g"""
 
-                        if result['percent_dv']:
+                        if result['percent_dv'] is not None:
                             response_text += f"\n• 1일 영양성분 기준치에 대한 비율: {result['percent_dv']}%"
 
                         if result['rule_note']:
@@ -3676,9 +3676,9 @@ def chatbot():
 ━━━━━━━━━━━━━━━
 ✨ 변환 결과
 ━━━━━━━━━━━━━━━
-• 표시값: {result['display']} {display_unit}"""
+• 표시값: {result['display']}{'' if '미만' in result['display'] else ' ' + display_unit}"""
 
-                    if result['percent_dv']:
+                    if result['percent_dv'] is not None:
                         response_text += f"\n• 1일 영양성분 기준치에 대한 비율: {result['percent_dv']}%"
 
                     if result['rule_note']:

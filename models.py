@@ -2163,12 +2163,19 @@ def get_display_value(nutrient: str, amount: float, age_group: str = "일반") -
         }
     """
     display = apply_rounding_rule(nutrient, amount)
-    percent_dv = calculate_percent_daily_value(nutrient, amount, age_group)
     rule = get_rounding_rule(nutrient)
+
+    # %기준치: 원본 값에서 직접 1회 라운딩 (더블 라운딩 방지)
+    dv = get_daily_value(nutrient, age_group)
+    if dv and dv['daily_value'] > 0:
+        raw_percent = (amount / dv['daily_value']) * 100
+        percent_dv = round(raw_percent)
+    else:
+        percent_dv = None
 
     return {
         'display': display,
-        'percent_dv': round(percent_dv) if percent_dv else None,
+        'percent_dv': percent_dv,
         'rule_note': rule['note'] if rule else None
     }
 
