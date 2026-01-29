@@ -5,6 +5,7 @@
 - 미답변 질문 로깅 (신규)
 """
 import sqlite3
+import math
 from datetime import datetime
 from rapidfuzz import fuzz
 from config import DATABASE_PATH, VISION_API_MONTHLY_LIMIT
@@ -1989,6 +1990,15 @@ def get_all_rounding_rules() -> list:
     return results
 
 
+def _round_half_up(value: float, decimals: int = 0) -> float:
+    """
+    사사오입 반올림 (0.5는 올림)
+    Python의 round()는 은행원 반올림을 사용하므로 별도 구현
+    """
+    multiplier = 10 ** decimals
+    return math.floor(value * multiplier + 0.5) / multiplier
+
+
 def apply_rounding_rule(nutrient: str, amount: float) -> str:
     """
     영양소 함량에 반올림 규칙 적용
@@ -2004,7 +2014,7 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
 
     if not rule:
         # 규칙이 없으면 기본 반올림 (정수)
-        return str(round(amount))
+        return str(int(_round_half_up(amount)))
 
     zero_threshold = rule['zero_threshold']
     round_to = rule['round_to']
@@ -2018,16 +2028,16 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
     if nutrient in ['지방', '포화지방', '트랜스지방']:
         if amount < 5:
             # 0.5g 단위로 반올림
-            rounded = round(amount * 2) / 2
+            rounded = _round_half_up(amount * 2) / 2
             return f"{rounded:.1f}"
         else:
             # 1g 단위로 반올림
-            return str(round(amount))
+            return str(int(_round_half_up(amount)))
 
     # 일반 반올림
     if round_to:
         # 특정 단위로 반올림 (예: 5 단위)
-        rounded = round(amount / round_to) * round_to
+        rounded = _round_half_up(amount / round_to) * round_to
         if decimal_places == 0:
             return str(int(rounded))
         else:
@@ -2035,9 +2045,9 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
     else:
         # 소수점 자리수에 맞춰 반올림
         if decimal_places == 0:
-            return str(round(amount))
+            return str(int(_round_half_up(amount)))
         else:
-            return f"{round(amount, decimal_places):.{decimal_places}f}"
+            return f"{_round_half_up(amount, decimal_places):.{decimal_places}f}"
 
 
 def get_display_value(nutrient: str, amount: float) -> dict:
