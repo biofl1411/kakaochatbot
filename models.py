@@ -617,8 +617,8 @@ def _insert_rounding_rules_data(cursor):
     data = [
         # (영양소, 규칙유형, 소수점자리, 반올림단위, 0표시기준, 비고)
         ("열량", "round_to_nearest", 0, 5, 5, "그 값을 그대로 표시하거나 5kcal 단위로, 5kcal 미만은 0"),
-        ("탄수화물", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
-        ("당류", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("탄수화물", "round_to_nearest", 0, 1, 0.5, "그 값을 그대로 표시하거나 1g 단위로, 1g 미만은 '1g 미만', 0.5g 미만은 0"),
+        ("당류", "round_to_nearest", 0, 1, 0.5, "그 값을 그대로 표시하거나 1g 단위로, 1g 미만은 '1g 미만', 0.5g 미만은 0"),
         ("식이섬유", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
         ("단백질", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
         ("지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
@@ -2023,6 +2023,13 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
     # 0 표시 기준 미만이면 0 반환
     if amount < zero_threshold:
         return "0"
+
+    # 탄수화물/당류 특수 규칙 (0.5g 이상 1g 미만은 "1g 미만")
+    if nutrient in ['탄수화물', '당류']:
+        if amount < 1:
+            return "1g 미만"
+        else:
+            return str(int(_round_half_up(amount)))
 
     # 지방류 특수 규칙 (0.5g 이상 5g 미만은 0.5g 단위)
     if nutrient in ['지방', '포화지방', '트랜스지방']:
