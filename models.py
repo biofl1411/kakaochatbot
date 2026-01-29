@@ -624,7 +624,7 @@ def _insert_rounding_rules_data(cursor):
         ("지방", "round_to_nearest", 1, None, 0.5, "그 값을 그대로 표시하거나 0.5g 미만은 0, 5g 이하는 0.1g 단위로, 5g 초과는 1g 단위로"),
         ("포화지방", "round_to_nearest", 1, None, 0.5, "그 값을 그대로 표시하거나 0.5g 미만은 0, 5g 이하는 0.1g 단위로, 5g 초과는 1g 단위로"),
         ("트랜스지방", "round_to_nearest", 1, None, 0.2, "그 값을 그대로 표시하거나 0.2g 미만은 0, 0.5g 미만은 '0.5g 미만', 5g 이하는 0.1g 단위, 5g 초과는 1g 단위 (식용유지류는 2g 미만 시 0)"),
-        ("콜레스테롤", "round_to_nearest", 0, 5, 2, "5mg 단위로 반올림, 2mg 미만은 0"),
+        ("콜레스테롤", "round_to_nearest", 0, 5, 2, "그 값을 그대로 표시하거나 5mg 단위로, 5mg 미만은 '5mg 미만', 2mg 미만은 0"),
         ("나트륨", "round_to_nearest", 0, 5, 5, "5mg 단위로 반올림, 5mg 미만은 0"),
     ]
 
@@ -2052,6 +2052,15 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
         else:
             # 5g 초과는 1g 단위
             return str(int(_round_half_up(amount)))
+
+    # 콜레스테롤 특수 규칙 (2mg 미만은 0으로 이미 처리됨)
+    if nutrient == '콜레스테롤':
+        if amount < 5:
+            return "5mg 미만"
+        else:
+            # 5mg 이상은 5mg 단위로 반올림
+            rounded = _round_half_up(amount / 5) * 5
+            return str(int(rounded))
 
     # 일반 반올림
     if round_to:
