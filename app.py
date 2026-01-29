@@ -3616,7 +3616,7 @@ def chatbot():
 • 표시값: {result['display']} g"""
 
                         if result['percent_dv']:
-                            response_text += f"\n• %기준치: {result['percent_dv']}%"
+                            response_text += f"\n• 1일 영양성분 기준치에 대한 비율: {result['percent_dv']}%"
 
                         if result['rule_note']:
                             response_text += f"""
@@ -3679,7 +3679,7 @@ def chatbot():
 • 표시값: {result['display']} {display_unit}"""
 
                     if result['percent_dv']:
-                        response_text += f"\n• %기준치: {result['percent_dv']}%"
+                        response_text += f"\n• 1일 영양성분 기준치에 대한 비율: {result['percent_dv']}%"
 
                     if result['rule_note']:
                         response_text += f"""
