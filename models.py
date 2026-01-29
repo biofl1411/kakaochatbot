@@ -172,11 +172,13 @@ def init_database():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS daily_value (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nutrient TEXT NOT NULL UNIQUE,
+            nutrient TEXT NOT NULL,
             daily_value REAL NOT NULL,
             unit TEXT NOT NULL,
+            age_group TEXT NOT NULL DEFAULT '일반',
             display_order INTEGER DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nutrient, age_group)
         )
     """)
 
@@ -255,7 +257,29 @@ def refresh_reference_data():
     ]
 
     for table_name, insert_func in reference_tables:
-        cursor.execute(f"DELETE FROM {table_name}")
+        # daily_value 스키마 변경 처리 (age_group 컬럼 추가)
+        if table_name == 'daily_value':
+            cursor.execute("PRAGMA table_info(daily_value)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'age_group' not in columns:
+                cursor.execute("DROP TABLE IF EXISTS daily_value")
+                cursor.execute("""
+                    CREATE TABLE daily_value (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nutrient TEXT NOT NULL,
+                        daily_value REAL NOT NULL,
+                        unit TEXT NOT NULL,
+                        age_group TEXT NOT NULL DEFAULT '일반',
+                        display_order INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(nutrient, age_group)
+                    )
+                """)
+                print(f"✓ {table_name} 테이블 스키마 업데이트")
+            else:
+                cursor.execute(f"DELETE FROM {table_name}")
+        else:
+            cursor.execute(f"DELETE FROM {table_name}")
         insert_func(cursor)
         print(f"✓ {table_name} 테이블 갱신 완료")
 
@@ -457,10 +481,12 @@ def _insert_serving_size_data(cursor):
 
 
 def _insert_daily_value_data(cursor):
-    """1일 영양성분 기준치 초기 데이터 삽입"""
-    data = [
+    """1일 영양성분 기준치 초기 데이터 삽입
+    식품 등의 표시·광고에 관한 법률 시행규칙 [별표 5] (2022.11.28 개정)
+    """
+    # 일반 (3세 이상) 기준치
+    data_general = [
         # (영양소, 기준치, 단위, 표시순서)
-        # 식품 등의 표시·광고에 관한 법률 시행규칙 [별표 5] (2022.11.28 개정)
         ("탄수화물", 324, "g", 1),
         ("당류", 100, "g", 2),
         ("식이섬유", 25, "g", 3),
@@ -499,11 +525,25 @@ def _insert_daily_value_data(cursor):
         ("크롬", 30, "μg", 36),
     ]
 
-    for row in data:
-        nutrient, dv, unit, order = row
+    for nutrient, dv, unit, order in data_general:
         cursor.execute("""
-            INSERT INTO daily_value (nutrient, daily_value, unit, display_order)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO daily_value (nutrient, daily_value, unit, age_group, display_order)
+            VALUES (?, ?, ?, '일반', ?)
+        """, (nutrient, dv, unit, order))
+
+    # 영유아 (만 1세 이상 2세 이하) 기준치
+    # [별표 5] 비고 2: 탄수화물 150g, 당류 50g, 단백질 35g, 지방 30g
+    data_infant = [
+        ("탄수화물", 150, "g", 1),
+        ("당류", 50, "g", 2),
+        ("단백질", 35, "g", 4),
+        ("지방", 30, "g", 5),
+    ]
+
+    for nutrient, dv, unit, order in data_infant:
+        cursor.execute("""
+            INSERT INTO daily_value (nutrient, daily_value, unit, age_group, display_order)
+            VALUES (?, ?, ?, '영유아', ?)
         """, (nutrient, dv, unit, order))
 
 
@@ -1822,13 +1862,29 @@ def search_serving_size(keyword: str) -> list:
 
 # ========== 1일 영양성분 기준치 관련 함수 ==========
 
-def get_daily_value(nutrient: str) -> dict:
-    """특정 영양소의 1일 기준치 조회"""
+def get_daily_value(nutrient: str, age_group: str = "일반") -> dict:
+    """특정 영양소의 1일 기준치 조회
+
+    Args:
+        nutrient: 영양소명
+        age_group: '일반' (3세 이상) 또는 '영유아' (만 1세 이상 2세 이하)
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
+    if age_group == "영유아":
+        # 영유아 전용 기준치가 있으면 사용, 없으면 일반 기준치 사용
+        cursor.execute("""
+            SELECT * FROM daily_value WHERE nutrient = ? AND age_group = '영유아'
+        """, (nutrient,))
+        result = cursor.fetchone()
+        if result:
+            conn.close()
+            return dict(result)
+
+    # 일반 기준치 조회
     cursor.execute("""
-        SELECT * FROM daily_value WHERE nutrient = ?
+        SELECT * FROM daily_value WHERE nutrient = ? AND age_group = '일반'
     """, (nutrient,))
 
     result = cursor.fetchone()
@@ -1837,14 +1893,15 @@ def get_daily_value(nutrient: str) -> dict:
     return dict(result) if result else None
 
 
-def get_all_daily_values() -> list:
+def get_all_daily_values(age_group: str = "일반") -> list:
     """모든 1일 영양성분 기준치 조회"""
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT * FROM daily_value ORDER BY display_order
-    """)
+        SELECT * FROM daily_value WHERE age_group = ?
+        ORDER BY display_order
+    """, (age_group,))
 
     results = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -1852,15 +1909,15 @@ def get_all_daily_values() -> list:
     return results
 
 
-def search_daily_value(keyword: str) -> list:
+def search_daily_value(keyword: str, age_group: str = "일반") -> list:
     """키워드로 1일 기준치 검색"""
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT * FROM daily_value WHERE nutrient LIKE ?
+        SELECT * FROM daily_value WHERE nutrient LIKE ? AND age_group = ?
         ORDER BY display_order
-    """, (f"%{keyword}%",))
+    """, (f"%{keyword}%", age_group))
 
     results = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -1868,9 +1925,9 @@ def search_daily_value(keyword: str) -> list:
     return results
 
 
-def calculate_percent_daily_value(nutrient: str, amount: float) -> float:
+def calculate_percent_daily_value(nutrient: str, amount: float, age_group: str = "일반") -> float:
     """영양소 함량의 %기준치 계산"""
-    dv = get_daily_value(nutrient)
+    dv = get_daily_value(nutrient, age_group)
     if not dv or dv['daily_value'] == 0:
         return None  # 기준치가 없는 경우
 
@@ -2089,9 +2146,14 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
             return f"{_round_half_up(amount, decimal_places):.{decimal_places}f}"
 
 
-def get_display_value(nutrient: str, amount: float) -> dict:
+def get_display_value(nutrient: str, amount: float, age_group: str = "일반") -> dict:
     """
     영양소의 표시값 계산 (반올림 + %기준치)
+
+    Args:
+        nutrient: 영양소명
+        amount: 원래 함량
+        age_group: '일반' 또는 '영유아'
 
     Returns:
         {
@@ -2101,7 +2163,7 @@ def get_display_value(nutrient: str, amount: float) -> dict:
         }
     """
     display = apply_rounding_rule(nutrient, amount)
-    percent_dv = calculate_percent_daily_value(nutrient, amount)
+    percent_dv = calculate_percent_daily_value(nutrient, amount, age_group)
     rule = get_rounding_rule(nutrient)
 
     return {
