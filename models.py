@@ -619,7 +619,7 @@ def _insert_rounding_rules_data(cursor):
         ("열량", "round_to_nearest", 0, 5, 5, "그 값을 그대로 표시하거나 5kcal 단위로, 5kcal 미만은 0"),
         ("탄수화물", "round_to_nearest", 0, 1, 0.5, "그 값을 그대로 표시하거나 1g 단위로, 1g 미만은 '1g 미만', 0.5g 미만은 0"),
         ("당류", "round_to_nearest", 0, 1, 0.5, "그 값을 그대로 표시하거나 1g 단위로, 1g 미만은 '1g 미만', 0.5g 미만은 0"),
-        ("식이섬유", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
+        ("식이섬유", "round_to_nearest", 0, 1, 0.5, "그 값을 그대로 표시하거나 1g 단위로, 1g 미만은 '1g 미만', 0.5g 미만은 0"),
         ("단백질", "round_to_nearest", 0, 1, 0.5, "1g 단위로 반올림, 0.5g 미만은 0"),
         ("지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
         ("포화지방", "round_to_nearest", 1, None, 0.5, "0.5g 미만은 0, 0.5g 이상 5g 미만은 0.5g 단위로, 5g 이상은 1g 단위로"),
@@ -2024,8 +2024,8 @@ def apply_rounding_rule(nutrient: str, amount: float) -> str:
     if amount < zero_threshold:
         return "0"
 
-    # 탄수화물/당류 특수 규칙 (0.5g 이상 1g 미만은 "1g 미만")
-    if nutrient in ['탄수화물', '당류']:
+    # 탄수화물/당류/식이섬유 특수 규칙 (0.5g 이상 1g 미만은 "1g 미만")
+    if nutrient in ['탄수화물', '당류', '식이섬유']:
         if amount < 1:
             return "1g 미만"
         else:
