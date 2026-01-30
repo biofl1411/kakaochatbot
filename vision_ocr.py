@@ -5,8 +5,19 @@ Google Vision API OCR
 import logging
 import re
 import requests
-from urllib.parse import unquote
-from google.cloud import vision
+from urllib.parse import unquote, urlparse
+
+# Google Vision API import (optional)
+VISION_IMPORT_SUCCESS = False
+vision = None
+try:
+    from google.cloud import vision
+    VISION_IMPORT_SUCCESS = True
+except BaseException as e:
+    logging.warning(f"Google Vision API 모듈 로드 실패: {e}")
+    vision = None
+    VISION_IMPORT_SUCCESS = False
+
 from models import can_use_vision_api, increment_api_usage
 
 logger = logging.getLogger(__name__)
@@ -14,7 +25,50 @@ logger = logging.getLogger(__name__)
 
 def is_vision_api_available() -> bool:
     """Vision API 사용 가능 여부 확인"""
+    if not VISION_IMPORT_SUCCESS:
+        return False
     return can_use_vision_api()
+
+
+def download_image(image_url: str) -> bytes:
+    """이미지 다운로드 (여러 방법 시도)"""
+    decoded_url = unquote(image_url)
+
+    # 다양한 헤더 조합 시도
+    header_options = [
+        {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+            'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Referer': 'https://talk.kakao.com/',
+        },
+        {
+            'User-Agent': 'KakaoTalk',
+        },
+        {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        },
+    ]
+
+    for headers in header_options:
+        try:
+            response = requests.get(
+                decoded_url,
+                headers=headers,
+                timeout=15,
+                verify=True,
+                allow_redirects=True
+            )
+            if response.status_code == 200 and len(response.content) > 1000:
+                logger.info(f"이미지 다운로드 성공: {len(response.content)} bytes")
+                return response.content
+            else:
+                logger.warning(f"이미지 다운로드 실패: HTTP {response.status_code}, size={len(response.content)}")
+        except Exception as e:
+            logger.warning(f"이미지 다운로드 시도 실패: {e}")
+            continue
+
+    return None
 
 
 def extract_food_type_from_image(image_url: str) -> dict:
@@ -28,6 +82,14 @@ def extract_food_type_from_image(image_url: str) -> dict:
             'message': str
         }
     """
+    # Vision API 모듈 로드 확인
+    if not VISION_IMPORT_SUCCESS:
+        return {
+            'success': False,
+            'food_type': None,
+            'message': 'Vision API 모듈이 설치되지 않았습니다.'
+        }
+
     # Vision API 사용 가능 여부 확인
     if not can_use_vision_api():
         return {
@@ -37,32 +99,22 @@ def extract_food_type_from_image(image_url: str) -> dict:
         }
 
     try:
-        # URL 디코딩
-        decoded_url = unquote(image_url)
-        logger.info(f"이미지 분석 시작: {decoded_url[:100]}...")
-
-        # 이미지 다운로드 (KakaoTalk CDN은 signed URL이므로 직접 다운로드 필요)
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        img_response = requests.get(decoded_url, headers=headers, timeout=10)
-
-        if img_response.status_code != 200:
-            logger.error(f"이미지 다운로드 실패: HTTP {img_response.status_code}")
-            return {
-                'success': False,
-                'food_type': None,
-                'message': '이미지를 다운로드할 수 없습니다.'
-            }
-
-        image_content = img_response.content
-        logger.info(f"이미지 다운로드 완료: {len(image_content)} bytes")
+        logger.info(f"이미지 분석 시작: {image_url[:100]}...")
 
         # Google Cloud Vision 클라이언트 초기화
         client = vision.ImageAnnotatorClient()
 
-        # 다운로드한 이미지 내용으로 분석
-        image = vision.Image(content=image_content)
+        # 방법 1: 이미지 다운로드 후 분석
+        image_content = download_image(image_url)
+
+        if image_content:
+            image = vision.Image(content=image_content)
+        else:
+            # 방법 2: URL 직접 사용 (공개 URL인 경우)
+            logger.info("URL 직접 사용 시도...")
+            decoded_url = unquote(image_url)
+            image = vision.Image()
+            image.source.image_uri = decoded_url
 
         # OCR 수행
         response = client.text_detection(image=image)
@@ -89,7 +141,7 @@ def extract_food_type_from_image(image_url: str) -> dict:
         logger.info(f"OCR 결과: {full_text[:200]}...")
 
         # API 사용량 증가
-        increment_api_usage()
+        increment_api_usage("google_vision")
 
         # 식품유형 추출
         food_type = extract_food_type_from_text(full_text)
@@ -128,6 +180,8 @@ def extract_food_type_from_text(ocr_text: str) -> str:
         patterns = [
             r'식품유형\s*[:\s]*([^\n\r,]+)',
             r'식품의\s*유형\s*[:\s]*([^\n\r,]+)',
+            r'식품의\s*종류\s*[:\s]*([^\n\r,]+)',
+            r'식품종류\s*[:\s]*([^\n\r,]+)',
             r'품목유형\s*[:\s]*([^\n\r,]+)',
             r'제품유형\s*[:\s]*([^\n\r,]+)',
             r'유\s*형\s*[:\s]*([^\n\r,]+)',
