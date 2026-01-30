@@ -281,12 +281,12 @@ init_database()
 ## 10. 현재 작업 브랜치
 
 ```
-claude/inspection-card-carousel-Qjngy
+claude/add-qa-learning-QYLeC
 ```
 
 ### 배포 명령어 (복사용)
 ```bash
-cd /home/biofl/kakaochatbot && git fetch origin claude/inspection-card-carousel-Qjngy && git reset --hard origin/claude/inspection-card-carousel-Qjngy && sudo fuser -k 5000/tcp && sleep 2 && source venv/bin/activate && nohup python3 app.py > logs/server.log 2>&1 &
+cd /home/biofl/kakaochatbot && git fetch origin claude/add-qa-learning-QYLeC && git reset --hard origin/claude/add-qa-learning-QYLeC && sudo fuser -k 5000/tcp && sleep 2 && source venv/bin/activate && nohup python3 app.py > logs/server.log 2>&1 &
 ```
 
 ---
