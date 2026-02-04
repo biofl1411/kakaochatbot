@@ -27,7 +27,7 @@ cd "$APP_DIR"
 log "Git pull 실행 중..."
 git fetch origin
 git checkout "$BRANCH"
-git pull origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 
 log "Git pull 완료"
 
