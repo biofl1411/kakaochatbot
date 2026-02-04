@@ -4,11 +4,20 @@
 - Q&A 질문-답변 저장 (신규)
 - 미답변 질문 로깅 (신규)
 """
+import re
 import sqlite3
 import math
 from datetime import datetime
 from rapidfuzz import fuzz
 from config import DATABASE_PATH, VISION_API_MONTHLY_LIMIT
+
+# 유니코드 가운데점 변형 문자 패턴 (·, ･, ∙, •, ‧, ⋅ 등)
+MIDDLE_DOT_PATTERN = re.compile(r'[\u00B7\uFF65\u2219\u2022\u2027\u22C5\u2981\u30FB]')
+
+
+def normalize_middle_dots(text: str) -> str:
+    """모든 유니코드 가운데점 변형을 제거"""
+    return MIDDLE_DOT_PATTERN.sub('', text)
 
 
 def get_connection():
@@ -746,8 +755,8 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 띄어쓰기 및 가운데점(· 또는 ･) 제거한 검색어
-    search_key = food_type.replace(" ", "").replace("·", "").replace("･", "")
+    # 띄어쓰기 및 모든 유니코드 가운데점 제거한 검색어
+    search_key = normalize_middle_dots(food_type.replace(" ", ""))
 
     # 1. 정확히 일치하는 경우 (띄어쓰기, 가운데점 무시)
     cursor.execute("""
@@ -767,7 +776,7 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     results = cursor.fetchall()
 
     # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
-    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "") == search_key]
+    endswith_filtered = [dict(r) for r in results if not normalize_middle_dots(dict(r)['food_type'].replace(" ", "")).startswith(search_key) or normalize_middle_dots(dict(r)['food_type'].replace(" ", "")) == search_key]
 
     if endswith_filtered:
         conn.close()
@@ -780,10 +789,29 @@ def get_inspection_item_all_matches(category: str, food_type: str) -> list:
     """, (category, f"%{search_key}%"))
     results = cursor.fetchall()
 
-    contains_filtered = [dict(r) for r in results]
+    if results:
+        conn.close()
+        return [dict(r) for r in results]
 
+    # 4. Python 폴백: SQL REPLACE가 처리하지 못한 유니코드 가운데점 변형 처리
+    cursor.execute("""
+        SELECT * FROM inspection_items WHERE category = ?
+    """, (category,))
+    all_rows = cursor.fetchall()
     conn.close()
-    return contains_filtered
+
+    # Python에서 모든 가운데점 변형을 정규화하여 매칭
+    exact = [dict(r) for r in all_rows if normalize_middle_dots(dict(r)['food_type'].replace(" ", "")) == search_key]
+    if exact:
+        return exact[:1]
+
+    endswith = [dict(r) for r in all_rows if normalize_middle_dots(dict(r)['food_type'].replace(" ", "")).endswith(search_key)]
+    endswith_filtered2 = [r for r in endswith if not normalize_middle_dots(r['food_type'].replace(" ", "")).startswith(search_key) or normalize_middle_dots(r['food_type'].replace(" ", "")) == search_key]
+    if endswith_filtered2:
+        return endswith_filtered2
+
+    contains = [dict(r) for r in all_rows if search_key in normalize_middle_dots(dict(r)['food_type'].replace(" ", ""))]
+    return contains
 
 
 def search_inspection_items(category: str, keyword: str) -> list:
@@ -877,8 +905,8 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 띄어쓰기 및 가운데점(· 또는 ･) 제거한 검색어
-    search_key = food_type.replace(" ", "").replace("·", "").replace("･", "")
+    # 띄어쓰기 및 모든 유니코드 가운데점 제거한 검색어
+    search_key = normalize_middle_dots(food_type.replace(" ", ""))
 
     # 1. 정확히 일치하는 경우 (띄어쓰기, 가운데점 무시)
     cursor.execute("""
@@ -898,7 +926,7 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     results = cursor.fetchall()
 
     # 검색어로 시작하는 항목 제외 (예: "햄버거류"는 "햄"으로 시작하므로 제외)
-    endswith_filtered = [dict(r) for r in results if not dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "").startswith(search_key) or dict(r)['food_type'].replace(" ", "").replace("·", "").replace("･", "") == search_key]
+    endswith_filtered = [dict(r) for r in results if not normalize_middle_dots(dict(r)['food_type'].replace(" ", "")).startswith(search_key) or normalize_middle_dots(dict(r)['food_type'].replace(" ", "")) == search_key]
 
     if endswith_filtered:
         conn.close()
@@ -911,10 +939,29 @@ def get_inspection_cycle_all_matches(category: str, industry: str, food_type: st
     """, (category, industry, f"%{search_key}%"))
     results = cursor.fetchall()
 
-    contains_filtered = [dict(r) for r in results]
+    if results:
+        conn.close()
+        return [dict(r) for r in results]
 
+    # 4. Python 폴백: SQL REPLACE가 처리하지 못한 유니코드 가운데점 변형 처리
+    cursor.execute("""
+        SELECT * FROM inspection_cycles WHERE category = ? AND industry = ?
+    """, (category, industry))
+    all_rows = cursor.fetchall()
     conn.close()
-    return contains_filtered
+
+    # Python에서 모든 가운데점 변형을 정규화하여 매칭
+    exact = [dict(r) for r in all_rows if normalize_middle_dots(dict(r)['food_type'].replace(" ", "")) == search_key]
+    if exact:
+        return exact[:1]
+
+    endswith = [dict(r) for r in all_rows if normalize_middle_dots(dict(r)['food_type'].replace(" ", "")).endswith(search_key)]
+    endswith_filtered2 = [r for r in endswith if not normalize_middle_dots(r['food_type'].replace(" ", "")).startswith(search_key) or normalize_middle_dots(r['food_type'].replace(" ", "")) == search_key]
+    if endswith_filtered2:
+        return endswith_filtered2
+
+    contains = [dict(r) for r in all_rows if search_key in normalize_middle_dots(dict(r)['food_type'].replace(" ", ""))]
+    return contains
 
 
 def search_inspection_cycles(category: str, industry: str, keyword: str) -> list:
@@ -935,6 +982,18 @@ def search_inspection_cycles(category: str, industry: str, keyword: str) -> list
     conn.close()
 
     return [dict(row) for row in results]
+
+
+def has_inspection_data() -> bool:
+    """검사항목/검사주기 데이터가 DB에 존재하는지 확인"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) as cnt FROM inspection_items")
+    items_count = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM inspection_cycles")
+    cycles_count = cursor.fetchone()['cnt']
+    conn.close()
+    return items_count > 0 and cycles_count > 0
 
 
 # ===== 유사 단어 검색 =====
@@ -966,28 +1025,28 @@ def get_all_food_types_cycles(category: str, industry: str) -> list:
 
 
 def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list:
-    """검사항목에서 유사한 식품 유형 찾기 (검색어로 시작/끝나는 단어 제외)"""
+    """검사항목에서 유사한 식품 유형 찾기"""
     all_types = get_all_food_types_items(category)
     similar = []
 
     # 띄어쓰기 및 가운데점(·) 제거
-    keyword_normalized = keyword.replace(" ", "").replace("·", "").replace("･", "")
+    keyword_normalized = normalize_middle_dots(keyword.replace(" ", ""))
 
     for food_type in all_types:
-        food_type_normalized = food_type.replace(" ", "").replace("·", "").replace("･", "")
+        food_type_normalized = normalize_middle_dots(food_type.replace(" ", ""))
 
-        # 검색어로 시작하는 단어 제외 (예: "햄" 검색 시 "햄버거류" 제외)
-        if food_type_normalized.startswith(keyword_normalized) and food_type_normalized != keyword_normalized:
+        # 정확히 일치하면 제외 (이미 메인 매칭에서 처리됨)
+        if food_type_normalized == keyword_normalized:
             continue
 
-        # 검색어로 끝나는 단어 제외 (endswith 매칭에서 처리됨)
-        if food_type_normalized.endswith(keyword_normalized) and food_type_normalized != keyword_normalized:
+        # 검색어를 포함하는 경우 높은 점수 부여
+        if keyword_normalized in food_type_normalized or food_type_normalized in keyword_normalized:
+            similar.append((food_type, 95))
             continue
 
         # 공통 글자 수 체크
         common_chars = set(keyword_normalized) & set(food_type_normalized)
         if len(common_chars) >= 2:
-            # 짧은 검색어는 ratio만 사용
             if len(keyword_normalized) <= 2:
                 score = fuzz.ratio(keyword_normalized, food_type_normalized)
             else:
@@ -1001,28 +1060,28 @@ def find_similar_items(category: str, keyword: str, min_score: int = 40) -> list
 
 
 def find_similar_cycles(category: str, industry: str, keyword: str, min_score: int = 40) -> list:
-    """검사주기에서 유사한 식품 유형 찾기 (검색어로 시작/끝나는 단어 제외)"""
+    """검사주기에서 유사한 식품 유형 찾기"""
     all_types = get_all_food_types_cycles(category, industry)
     similar = []
 
     # 띄어쓰기 및 가운데점(·) 제거
-    keyword_normalized = keyword.replace(" ", "").replace("·", "").replace("･", "")
+    keyword_normalized = normalize_middle_dots(keyword.replace(" ", ""))
 
     for food_type in all_types:
-        food_type_normalized = food_type.replace(" ", "").replace("·", "").replace("･", "")
+        food_type_normalized = normalize_middle_dots(food_type.replace(" ", ""))
 
-        # 검색어로 시작하는 단어 제외 (예: "햄" 검색 시 "햄버거류" 제외)
-        if food_type_normalized.startswith(keyword_normalized) and food_type_normalized != keyword_normalized:
+        # 정확히 일치하면 제외 (이미 메인 매칭에서 처리됨)
+        if food_type_normalized == keyword_normalized:
             continue
 
-        # 검색어로 끝나는 단어 제외 (endswith 매칭에서 처리됨)
-        if food_type_normalized.endswith(keyword_normalized) and food_type_normalized != keyword_normalized:
+        # 검색어를 포함하는 경우 높은 점수 부여
+        if keyword_normalized in food_type_normalized or food_type_normalized in keyword_normalized:
+            similar.append((food_type, 95))
             continue
 
         # 공통 글자 수 체크
         common_chars = set(keyword_normalized) & set(food_type_normalized)
         if len(common_chars) >= 2:
-            # 짧은 검색어는 ratio만 사용
             if len(keyword_normalized) <= 2:
                 score = fuzz.ratio(keyword_normalized, food_type_normalized)
             else:
