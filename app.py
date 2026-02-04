@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 
-from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER, NUTRITION_LABEL_CATEGORIES
+from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER, NUTRITION_LABEL_CATEGORIES, CRAWL_HOUR, CRAWL_MINUTE
 from models import (
     init_database,
     has_inspection_data,
@@ -5920,7 +5920,21 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
         )
 
 
+def scheduled_crawl():
+    """매일 자동 크롤링 작업"""
+    logger.info("스케줄러: 자동 크롤링 시작...")
+    try:
+        from crawler import run_crawler
+        crawl_result = run_crawler()
+        logger.info(f"스케줄러: 자동 크롤링 완료 - {crawl_result}개 데이터 저장")
+    except Exception as e:
+        logger.error(f"스케줄러: 자동 크롤링 실패 - {e}")
+
+
 if __name__ == '__main__':
+    import os
+    from apscheduler.schedulers.background import BackgroundScheduler
+
     # 데이터베이스 초기화
     init_database()
 
@@ -5935,6 +5949,19 @@ if __name__ == '__main__':
             logger.error(f"초기 크롤링 실패: {e}")
     else:
         logger.info("DB에 검사 데이터가 존재합니다.")
+
+    # 매일 자동 크롤링 스케줄러 (Flask reloader 중복 방지)
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not app.debug:
+        scheduler = BackgroundScheduler()
+        scheduler.add_job(
+            scheduled_crawl,
+            'cron',
+            hour=CRAWL_HOUR,
+            minute=CRAWL_MINUTE,
+            id='daily_crawl'
+        )
+        scheduler.start()
+        logger.info(f"자동 크롤링 스케줄러 시작: 매일 {CRAWL_HOUR:02d}:{CRAWL_MINUTE:02d}")
 
     logger.info(f"서버 시작: http://{SERVER_HOST}:{SERVER_PORT}")
 

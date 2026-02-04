@@ -183,7 +183,7 @@ SECTION_FILTER = {
 }
 
 # 스케줄러 설정 (매일 크롤링 시간)
-CRAWL_HOUR = 7  # 오전 7시
+CRAWL_HOUR = 5  # 오전 5시
 CRAWL_MINUTE = 0
 
 # 로깅 설정
