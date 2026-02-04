@@ -11,6 +11,7 @@ import logging
 from config import SERVER_HOST, SERVER_PORT, LOG_FILE, LOG_FORMAT, URL_MAPPING, DISPLAY_Q_NUMBER, NUTRITION_LABEL_CATEGORIES
 from models import (
     init_database,
+    has_inspection_data,
     get_inspection_item,
     get_inspection_item_all_matches,
     get_inspection_cycle,
@@ -5922,6 +5923,19 @@ FT-IR로 분석하여 Glycerol, Cellulose(섬유질) 등을 확인하여 식품�
 if __name__ == '__main__':
     # 데이터베이스 초기화
     init_database()
+
+    # DB에 검사 데이터가 없으면 자동 크롤링 실행
+    if not has_inspection_data():
+        logger.info("DB에 검사 데이터가 없습니다. 크롤링을 시작합니다...")
+        try:
+            from crawler import run_crawler
+            crawl_result = run_crawler()
+            logger.info(f"초기 크롤링 완료: {crawl_result}개 데이터 저장")
+        except Exception as e:
+            logger.error(f"초기 크롤링 실패: {e}")
+    else:
+        logger.info("DB에 검사 데이터가 존재합니다.")
+
     logger.info(f"서버 시작: http://{SERVER_HOST}:{SERVER_PORT}")
 
     # 개발 서버 실행

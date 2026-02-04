@@ -65,6 +65,63 @@ class Crawler:
             self._driver = None
             logger.info("WebDriver 종료")
 
+    def _parse_table_with_rowspan(self, table):
+        """rowspan 속성을 처리하여 HTML 테이블을 파싱
+
+        Returns:
+            list of list: 각 행의 셀 텍스트 리스트 (헤더 행 제외)
+        """
+        rows = table.find_all("tr")
+        if not rows:
+            return []
+
+        # 첫 번째 행(헤더)에서 컬럼 수 결정
+        header = rows[0]
+        header_cells = header.find_all(["th", "td"], recursive=False)
+        max_cols = sum(int(cell.get("colspan", 1)) for cell in header_cells)
+        if max_cols == 0:
+            max_cols = len(header_cells)
+
+        # rowspan 추적: {col_index: (text, remaining_rowspan)}
+        active_rowspans = {}
+        parsed_rows = []
+
+        for row in rows[1:]:  # 헤더 제외
+            tds = row.find_all(["td", "th"], recursive=False)
+            current_row = []
+            td_index = 0
+            col_index = 0
+
+            while col_index < max_cols:
+                if col_index in active_rowspans:
+                    # 이전 행의 rowspan이 아직 활성 상태
+                    text, remaining = active_rowspans[col_index]
+                    current_row.append(text)
+                    if remaining > 1:
+                        active_rowspans[col_index] = (text, remaining - 1)
+                    else:
+                        del active_rowspans[col_index]
+                elif td_index < len(tds):
+                    td = tds[td_index]
+                    text = td.get_text(strip=True)
+                    rowspan = int(td.get("rowspan", 1))
+                    colspan = int(td.get("colspan", 1))
+                    if rowspan > 1:
+                        active_rowspans[col_index] = (text, rowspan - 1)
+                    current_row.append(text)
+                    # colspan 처리: 같은 텍스트로 여러 컬럼 채움
+                    for _ in range(colspan - 1):
+                        col_index += 1
+                        current_row.append(text)
+                    td_index += 1
+                else:
+                    current_row.append("")
+                col_index += 1
+
+            parsed_rows.append(current_row)
+
+        return parsed_rows
+
     def crawl_inspection_items(self, category: str) -> int:
         """
         검사항목 크롤링 (Selenium 사용 - 팝업 요소에서 데이터 추출)
@@ -89,9 +146,16 @@ class Crawler:
             logger.info(f"검사항목 크롤링 시작: {category} (팝업 ID: {target_id})")
 
             driver.get(url)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
+            # 팝업 요소가 로드될 때까지 대기
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, f"div.needpopup.answerPop#{target_id}"))
+                )
+            except Exception:
+                # 팝업 요소 대기 실패 시 body 대기로 폴백
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
 
             soup = BeautifulSoup(driver.page_source, "html.parser")
 
@@ -107,13 +171,13 @@ class Crawler:
                 return 0
 
             count = 0
-            rows = table.find_all("tr")[1:]  # 헤더 제외
+            # rowspan 처리하여 테이블 파싱
+            parsed_rows = self._parse_table_with_rowspan(table)
 
-            for row in rows:
-                columns = row.find_all("td", recursive=False)
-                if len(columns) >= 3:
-                    food_type = columns[1].get_text(strip=True)
-                    items = columns[2].get_text(strip=True)
+            for cells in parsed_rows:
+                if len(cells) >= 3:
+                    food_type = cells[1]
+                    items = cells[2]
                     if food_type and items:
                         save_inspection_item(category, food_type, items)
                         count += 1
@@ -153,9 +217,16 @@ class Crawler:
             logger.info(f"검사주기 크롤링 시작: {category}")
 
             driver.get(url)
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
+            # 첫 번째 업종의 팝업 요소가 로드될 때까지 대기
+            first_target_id = INDUSTRY_MAPPING.get(industries[0])
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, f"div.needpopup.answerPop#{first_target_id}"))
+                )
+            except Exception:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
 
             soup = BeautifulSoup(driver.page_source, "html.parser")
 
@@ -173,14 +244,14 @@ class Crawler:
                 if not table:
                     continue
 
-                rows = table.find_all("tr")[1:]  # 헤더 제외
+                # rowspan 처리하여 테이블 파싱
+                parsed_rows = self._parse_table_with_rowspan(table)
 
-                for row in rows:
-                    columns = row.find_all("td", recursive=False)
-                    if len(columns) >= 4:
-                        food_group = columns[1].get_text(strip=True)
-                        food_type_text = columns[2].get_text(strip=True)
-                        cycle = columns[3].get_text(strip=True)
+                for cells in parsed_rows:
+                    if len(cells) >= 4:
+                        food_group = cells[1]
+                        food_type_text = cells[2]
+                        cycle = cells[3]
 
                         # 여러 식품 유형이 콤마로 구분된 경우 각각 저장
                         food_types = [ft.strip() for ft in food_type_text.split(',')]

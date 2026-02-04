@@ -12,7 +12,7 @@ from flask import Flask, request, jsonify
 # 설정
 WEBHOOK_SECRET = os.environ.get('GITHUB_WEBHOOK_SECRET', 'your-webhook-secret-here')
 DEPLOY_SCRIPT = '/home/biofl/kakaochatbot/deploy.sh'
-ALLOWED_BRANCHES = ['main', 'master', 'claude/fix-image-analysis-error-TN7ai', 'claude/inspection-card-carousel-Qjngy', 'claude/add-qa-learning-QYLeC']
+ALLOWED_BRANCHES = ['main', 'master', 'claude/fix-image-analysis-error-TN7ai', 'claude/inspection-card-carousel-Qjngy', 'claude/add-qa-learning-QYLeC', 'claude/fix-kakao-chatbot-dZ3pq']
 
 # 로깅 설정
 logging.basicConfig(
